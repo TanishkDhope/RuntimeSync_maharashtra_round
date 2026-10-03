@@ -1,2 +1,9 @@
 # Dataset build scripts: kept locally, not committed
 scripts/
+
+# Local-only guide for training the model
+train_model.md
+
+# Python environment and trained models (too big for git)
+.venv/
+models/
