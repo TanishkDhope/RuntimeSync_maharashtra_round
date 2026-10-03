@@ -80,25 +80,35 @@ Not built yet, in roughly the order they should come:
 
 ---
 
-## Switching from the stub to the trained model
+## Running with Ollama and GGUF Model
 
-One config value. In `server/.env`:
+1. **Start Ollama** (make sure Ollama is running):
+   ```bash
+   ollama serve
+   ```
 
-```ini
-DIAGNOSER=model
-MODEL_PATH=../models/relearn-diagnosis/final
-```
+2. **Backend**:
+   In `server/.env`:
+   ```ini
+   DIAGNOSER=ollama
+   MODEL_PATH=../model/relearn-diagnosis.gguf
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=relearn-diagnosis
+   ```
+   Then run:
+   ```bash
+   cd server
+   pip install -r requirements.txt
+   uvicorn app.main:app --reload --port 8000
+   ```
+   The backend will automatically detect `model/relearn-diagnosis.gguf`, register it in Ollama, and use it for embedding ranking!
 
-Then install the model dependencies and restart:
-
-```bash
-cd server
-pip install -r requirements-model.txt    # sentence-transformers, torch
-uvicorn app.main:app --reload --port 8000
-```
-
-`GET /health` and the badge in the app header both flip from "Stub diagnoser —
-not the real model" to "Trained model". Nothing else changes.
+3. **Frontend**:
+   ```bash
+   cd client
+   npm install
+   npm run dev
+   ```
 
 If `MODEL_PATH` does not exist, the server **fails at startup with a clear
 message** rather than quietly falling back to the stub — demoing the stub by

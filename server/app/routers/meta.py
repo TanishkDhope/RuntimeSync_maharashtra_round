@@ -15,7 +15,7 @@ def health(state: StateDep) -> HealthOut:
     """Reports which diagnoser is active so nobody demos the stub by accident."""
     return HealthOut(
         diagnoser=state.diagnoser.name,
-        diagnoser_is_real_model=state.diagnoser.name == "model",
+        diagnoser_is_real_model=state.diagnoser.name in ("model", "ollama"),
         model_path=str(state.settings.model_dir),
         database=state.database_backend,
         database_connected=state.database_connected,
