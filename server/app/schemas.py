@@ -51,7 +51,19 @@ class HealthOut(BaseModel):
     problem_count: int
     misconception_count: int
     library_size: int
+    # A provider, model and key are all set in config.
     llm_configured: bool = False
+    # Whether that provider actually answered just now (brief s9). None when
+    # nothing is configured, so there is nothing to reach.
+    llm_reachable: bool | None = None
+    llm_detail: str | None = None
+    # Prompts in use. Empty strings against a model trained with prompts mean
+    # degraded rankings, so /health shows them rather than hiding them.
+    query_prompt: str = ""
+    doc_prompt: str = ""
+    serve_write_code: bool = False
+    unknown_threshold: float = 0.0
+    probe_gap: float = 0.0
 
 
 # --- problems ---------------------------------------------------------------
@@ -118,10 +130,14 @@ class FeedbackStep(BaseModel):
     # True when the top score is below UNKNOWN_THRESHOLD: nothing in the
     # library matches well. No belief is drafted (that path is not built).
     unknown: bool = False
-    # True when the top two scores are equal and the stub cannot separate
-    # them. Surfaced honestly; the probe path that would resolve it is not
-    # built yet.
+    # True when the top two scores are closer together than PROBE_GAP, so the
+    # diagnoser has not really separated them. Surfaced honestly; the probe
+    # path that would resolve it is not built yet.
     tied: bool = False
+    # The numbers behind `tied`, so the UI can show why it fired rather than
+    # just asserting it. None when there is only one candidate.
+    top_two_gap: float | None = None
+    probe_gap: float | None = None
     has_next: bool
 
 

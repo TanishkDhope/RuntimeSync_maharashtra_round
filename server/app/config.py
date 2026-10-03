@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Quiz
     session_length: int = 5
     run_timeout_seconds: float = 5.0
+    # write_code answers are graded by running student code. The runner has
+    # no memory cap and no network block yet, so serving these items is
+    # opt-in rather than the default (brief s14 names them the first cut).
+    serve_write_code: bool = False
 
     # LLM. Unused this milestone: the intervention and probe paths that would
     # call it are not built yet. Reported by /health so the UI can say so.

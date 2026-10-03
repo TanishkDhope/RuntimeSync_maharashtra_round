@@ -3,6 +3,11 @@
 Only the tables this milestone needs. learner_misconceptions, probes and
 candidate_misconceptions belong to the intervention, reassessment and probe
 paths, which are not built yet.
+
+create_all() creates missing tables but never alters existing ones, so adding
+a column here does not reach a database that already has the table. During the
+hackathon the fix is to delete server/relearn.db and let it be rebuilt; a
+longer-lived database would need Alembic.
 """
 
 from __future__ import annotations
@@ -56,5 +61,9 @@ class Attempt(SQLModel, table=True):
     is_correct: bool
     # [{"misconception_id": str, "score": float}], empty when the answer was right
     diagnosis: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    # Which diagnoser produced `diagnosis`: stub | model | ollama. Recorded per
+    # attempt, because DIAGNOSER can change between runs and a stub result must
+    # never be relabelled "trained model" when an old session is reopened.
+    diagnoser: str = Field(default="stub", max_length=20)
     test_results: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=_now)

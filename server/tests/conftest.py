@@ -22,13 +22,20 @@ def library():
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    """Stub diagnoser, a throwaway SQLite file, short timeout."""
+    """Stub diagnoser, a throwaway SQLite file, short timeout.
+
+    `serve_write_code` is on here although it is off in .env.example, so the
+    runner and the write_code half of the flow stay covered. The test that the
+    shipped default really excludes them lives in test_flow.py and builds its
+    own Settings.
+    """
     return Settings(
         diagnoser="stub",
         data_dir=str(DATA_DIR),
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         session_length=3,
         run_timeout_seconds=3.0,
+        serve_write_code=True,
     )
 
 

@@ -86,6 +86,8 @@ export function FeedbackPanel({ step, onContinue, advancing, error }) {
         isRealModel={step.diagnoser_is_real_model}
         unknown={step.unknown}
         tied={step.tied}
+        topTwoGap={step.top_two_gap}
+        probeGap={step.probe_gap}
       />
 
       {error && <p className="text-sm text-destructive">{error}</p>}

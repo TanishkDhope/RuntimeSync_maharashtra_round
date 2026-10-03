@@ -16,7 +16,8 @@ from app.checking import check_predict_output, normalise_output
         ("0\r\n1\r\n2", "0\n1\n2"),
         ("0\r1\r2", "0\n1\n2"),
         ("9 4   ", "9 4"),
-        ("\n\n9 4\n\n\n", "9 4"),
+        ("9 4\n\n\n", "9 4"),  # trailing blank lines are dropped
+        ("\n\n9 4", "\n\n9 4"),  # a leading blank line is real program output
         ("  indented", "  indented"),  # leading indentation is significant
         ("a\n\nb", "a\n\nb"),  # an internal blank line is significant
         (None, ""),
@@ -36,6 +37,16 @@ def test_trailing_newline_and_crlf_still_correct(library):
     problem = library.problem("PO_VAR_01")
     assert check_predict_output(problem, "9 4\r\n") is True
     assert check_predict_output(problem, "9 4  \n\n") is True
+
+
+def test_a_leading_blank_line_is_not_accepted_as_correct(library):
+    """PO_VAR_01 prints "9 4" on its first line, not a blank line.
+
+    Guards the false accept in review 3.7: if leading blank lines were
+    stripped, an answer that omitted a real blank first line would pass.
+    """
+    problem = library.problem("PO_VAR_01")
+    assert check_predict_output(problem, "\n9 4") is False
 
 
 def test_leading_whitespace_is_significant(library):
