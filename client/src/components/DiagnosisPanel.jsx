@@ -14,7 +14,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
  * badge tooltip, so the badge text stays short but the active implementation
  * is still inspectable.
  */
-export function DiagnosisPanel({ diagnosis, diagnoser, isRealModel, unknown, tied }) {
+export function DiagnosisPanel({
+  diagnosis,
+  diagnoser,
+  isRealModel,
+  unknown,
+  tied,
+  topTwoGap,
+  probeGap,
+}) {
   if (!diagnosis?.length) return null
 
   const topScore = diagnosis[0].score
@@ -69,8 +77,31 @@ export function DiagnosisPanel({ diagnosis, diagnoser, isRealModel, unknown, tie
               <Notice
                 icon={<Split className="mt-0.5 size-4 shrink-0" />}
                 tone="amber"
-                title="Two candidates score the same"
-                body="These beliefs predict the same wrong output here, so this answer alone cannot separate them. A follow-up question would be needed to tell them apart."
+                title={
+                  topTwoGap === 0
+                    ? "Two candidates score the same"
+                    : "Too close to call between the top two"
+                }
+                body={
+                  <>
+                    These beliefs are not separated by this answer, so a
+                    follow-up question would be needed to tell them apart.
+                    {typeof topTwoGap === "number" && typeof probeGap === "number" && (
+                      <>
+                        {" "}
+                        The gap between them is{" "}
+                        <span className="font-mono tabular-nums">
+                          {topTwoGap.toFixed(3)}
+                        </span>
+                        , under the{" "}
+                        <span className="font-mono tabular-nums">
+                          {probeGap.toFixed(3)}
+                        </span>{" "}
+                        threshold (<code>PROBE_GAP</code>).
+                      </>
+                    )}
+                  </>
+                }
               />
             )}
             {unknown && (
@@ -139,7 +170,7 @@ function Notice({ icon, tone, title, body }) {
       {icon}
       <div className="space-y-1">
         <p className="text-sm font-medium">{title}</p>
-        <p className="text-sm opacity-90">{body}</p>
+        <div className="text-sm opacity-90">{body}</div>
       </div>
     </div>
   )

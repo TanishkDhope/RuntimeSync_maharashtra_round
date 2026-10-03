@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..data import Problem
+from ..data import Misconception, Problem
 
 
 @dataclass(frozen=True)
@@ -32,4 +32,8 @@ class Diagnoser(Protocol):
         student_explanation: str,
     ) -> list[Candidate]:
         """Candidate misconceptions, sorted by score high to low."""
+        ...
+
+    def add_misconception(self, misconception: 'Misconception') -> None:
+        """Register a new misconception dynamically."""
         ...

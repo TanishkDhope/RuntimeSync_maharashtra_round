@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 
+from sqlalchemy import update
 from sqlmodel import Session, select
 
 from .checking import check_predict_output
@@ -46,13 +47,17 @@ def choose_problems(
     count: int,
     seen_problem_ids: set[str],
     rng: random.Random | None = None,
+    *,
+    serve_write_code: bool = True,
 ) -> list[str]:
     """Pick `count` problems for a session.
 
     A run should show both question types, so one slot is reserved for a
     write_code problem and placed last. Some topics (variables, functions)
     have no write_code problems at all, in which case the run is all
-    predict_output.
+    predict_output. When `serve_write_code` is false (the default config,
+    SERVE_WRITE_CODE) they are left out entirely: grading them runs student
+    code, and the runner still has no memory cap or network block.
 
     Within each type, prefers problems the learner has not seen, and the
     train/validation splits so the test split stays clean for evaluating the
@@ -61,6 +66,8 @@ def choose_problems(
     """
     rng = rng or random.Random()
     pool = library.problems_for_topic(topic)
+    if not serve_write_code:
+        pool = [p for p in pool if p.item_type != "write_code"]
     if not pool:
         raise FlowError(f"no problems for topic {topic!r}")
 
@@ -115,7 +122,13 @@ def start_session(
     seen = set(
         db.exec(select(Attempt.problem_id).where(Attempt.learner_id == learner_id)).all()
     )
-    queue = choose_problems(library, topic, settings.session_length, seen)
+    queue = choose_problems(
+        library,
+        topic,
+        settings.session_length,
+        seen,
+        serve_write_code=settings.serve_write_code,
+    )
 
     quiz = QuizSession(learner_id=learner_id, topic=topic, problem_queue=queue, cursor=0)
     db.add(quiz)
@@ -127,12 +140,46 @@ def start_session(
 def current_step(db: Session, library: Library, settings: Settings, quiz: QuizSession):
     """Rebuild whatever step the session is sitting on. Used to resume."""
     if quiz.state == "done" or quiz.cursor >= len(quiz.problem_queue):
-        return build_summary(db, library, quiz)
+        return build_summary(db, library, settings, quiz)
     if quiz.state == "feedback":
         attempt = _latest_attempt(db, quiz)
         if attempt is not None:
             return _feedback_step(library, settings, quiz, attempt)
+    # "grading" means a submission is in flight or crashed mid-flight; either
+    # way the problem is still the thing to show.
     return _ask_step(library, quiz)
+
+
+def _grade(
+    library: Library,
+    settings: Settings,
+    diagnoser: Diagnoser,
+    quiz: QuizSession,
+    student_response: str,
+    student_explanation: str,
+) -> tuple[bool, list[dict] | None, list[Candidate]]:
+    """Check the answer and, when it is wrong, diagnose it. No database work."""
+    problem = library.problem(quiz.problem_queue[quiz.cursor])
+
+    test_results: list[dict] | None = None
+    if problem.item_type == "write_code":
+        if not settings.serve_write_code:
+            # Belt and braces: choose_problems already filtered these out, so
+            # reaching here means a queue built before the setting changed.
+            raise FlowError(
+                "write_code answers are not graded in this configuration "
+                "(SERVE_WRITE_CODE is off)"
+            )
+        is_correct, test_results = run_write_code(
+            problem, student_response, settings.run_timeout_seconds
+        )
+    else:
+        is_correct = check_predict_output(problem, student_response)
+
+    ranked: list[Candidate] = []
+    if not is_correct:
+        ranked = diagnoser.rank(problem, student_response, student_explanation)[:TOP_N]
+    return is_correct, test_results, ranked
 
 
 def submit_answer(
@@ -151,19 +198,54 @@ def submit_answer(
     if quiz.cursor >= len(quiz.problem_queue):
         raise FlowError("no problem is waiting for an answer")
 
-    problem = library.problem(quiz.problem_queue[quiz.cursor])
+    # Claim the answer slot before doing any work. Two quick clicks both pass
+    # the state checks above, and without this both would write an attempt
+    # (review 3.9). Whoever flips asking -> grading owns this submission.
+    claimed = db.exec(
+        update(QuizSession)
+        .where(QuizSession.id == quiz.id, QuizSession.state == "asking")
+        .values(state="grading")
+    )
+    db.commit()
+    if claimed.rowcount != 1:
+        db.refresh(quiz)
+        raise FlowError("this answer is already being graded")
 
-    test_results: list[dict] | None = None
-    if problem.item_type == "write_code":
-        is_correct, test_results = run_write_code(
-            problem, student_response, settings.run_timeout_seconds
+    try:
+        is_correct, test_results, ranked = _grade(
+            library, settings, diagnoser, quiz, student_response, student_explanation
         )
-    else:
-        is_correct = check_predict_output(problem, student_response)
+        
+        problem = library.problem(quiz.problem_queue[quiz.cursor])
 
-    ranked: list[Candidate] = []
-    if not is_correct:
-        ranked = diagnoser.rank(problem, student_response, student_explanation)[:TOP_N]
+        if not is_correct and ranked and settings.llm_api_key:
+            from .rerank import rerank_candidates
+            ranked = rerank_candidates(settings, library, problem, student_response, student_explanation, ranked)
+
+        scores = [c.score for c in ranked]
+        if not is_correct and (not scores or scores[0] < settings.unknown_threshold) and settings.llm_api_key:
+            from .generation import generate_misconception
+            import hashlib
+            
+            new_desc = generate_misconception(settings, problem, student_response, student_explanation)
+            new_id = f"LLM_GEN_{hashlib.sha256(new_desc.encode()).hexdigest()[:8]}"
+            
+            m = library.add_generated_misconception(new_id, new_desc, problem.topic)
+            diagnoser.add_misconception(m)
+            
+            ranked = diagnoser.rank(problem, student_response, student_explanation)[:TOP_N]
+
+    except Exception:
+        # Hand the slot back, or the session is wedged in "grading" and the
+        # learner can neither answer nor move on.
+        db.exec(
+            update(QuizSession)
+            .where(QuizSession.id == quiz.id, QuizSession.state == "grading")
+            .values(state="asking")
+        )
+        db.commit()
+        db.refresh(quiz)
+        raise
 
     attempt = Attempt(
         session_id=quiz.id,
@@ -176,6 +258,9 @@ def submit_answer(
         diagnosis=[
             {"misconception_id": c.misconception_id, "score": c.score} for c in ranked
         ],
+        # Recorded now, so reopening this attempt later cannot relabel it with
+        # whatever DIAGNOSER happens to be set to then (review 3.1).
+        diagnoser=diagnoser.name,
         test_results=test_results,
     )
     quiz.state = "feedback"
@@ -185,7 +270,7 @@ def submit_answer(
     db.refresh(attempt)
     db.refresh(quiz)
 
-    return _feedback_step(library, settings, quiz, attempt, diagnoser_name=diagnoser.name)
+    return _feedback_step(library, settings, quiz, attempt)
 
 
 def advance(db: Session, library: Library, settings: Settings, quiz: QuizSession):
@@ -233,10 +318,11 @@ def _feedback_step(
     settings: Settings,
     quiz: QuizSession,
     attempt: Attempt,
-    diagnoser_name: str | None = None,
 ) -> FeedbackStep:
     problem = library.problem(attempt.problem_id)
-    name = diagnoser_name or settings.diagnoser
+    # The diagnoser that actually produced this diagnosis, not the one
+    # configured right now (review 3.1).
+    name = attempt.diagnoser or settings.diagnoser
     candidates = []
     for row in attempt.diagnosis or []:
         misconception = library.misconception(row["misconception_id"])
@@ -264,27 +350,50 @@ def _feedback_step(
         diagnoser_is_real_model=name in ("model", "ollama"),
         diagnosis=candidates,
         unknown=bool(scores) and scores[0] < settings.unknown_threshold,
-        tied=len(scores) > 1 and scores[0] == scores[1],
+        tied=is_tied(scores, settings.probe_gap),
+        top_two_gap=round(scores[0] - scores[1], 4) if len(scores) > 1 else None,
+        probe_gap=settings.probe_gap,
         has_next=quiz.cursor + 1 < len(quiz.problem_queue),
     )
 
 
-def single_top_misconception(diagnosis: list[dict]) -> str | None:
+def is_tied(scores: list[float], probe_gap: float) -> bool:
+    """Whether the top two candidates are too close to call (brief s6.4).
+
+    Exact equality is the wrong test for a real model: cosine similarities are
+    floats and are essentially never equal, so an exact-equality check means
+    the differentiation notice fires for the stub and then silently never
+    fires again once a trained model is switched on (review 2.9). The gap
+    against PROBE_GAP is the condition the probe step triggers on.
+    """
+    if len(scores) < 2:
+        return False
+    return (scores[0] - scores[1]) < probe_gap
+
+
+def single_top_misconception(diagnosis: list[dict], probe_gap: float = 0.0) -> str | None:
     """The belief the diagnoser actually put first, or None if it did not.
 
-    When the top two scores are equal the diagnoser has not chosen between
-    them, and taking the first of the list would turn list order into a
-    finding. The stub does exactly this on write_code answers, where every
-    candidate scores the same.
+    When the top two scores are within `probe_gap` the diagnoser has not
+    chosen between them, and taking the first of the list would turn list
+    order into a finding. The stub does exactly this on write_code answers,
+    where every candidate scores the same.
+
+    `probe_gap` defaults to 0.0, which keeps the old exact-tie behaviour for
+    callers that have no settings to hand.
     """
     if not diagnosis:
         return None
-    if len(diagnosis) > 1 and diagnosis[0]["score"] == diagnosis[1]["score"]:
+    if is_tied([row["score"] for row in diagnosis], probe_gap) or (
+        len(diagnosis) > 1 and diagnosis[0]["score"] == diagnosis[1]["score"]
+    ):
         return None
     return diagnosis[0]["misconception_id"]
 
 
-def build_summary(db: Session, library: Library, quiz: QuizSession) -> SummaryStep:
+def build_summary(
+    db: Session, library: Library, settings: Settings, quiz: QuizSession
+) -> SummaryStep:
     attempts = db.exec(
         select(Attempt).where(Attempt.session_id == quiz.id).order_by(Attempt.id)
     ).all()
@@ -294,7 +403,7 @@ def build_summary(db: Session, library: Library, quiz: QuizSession) -> SummarySt
     undiagnosed = 0
     for attempt in attempts:
         problem = library.problem(attempt.problem_id)
-        top = single_top_misconception(attempt.diagnosis or [])
+        top = single_top_misconception(attempt.diagnosis or [], settings.probe_gap)
         if top:
             tally[top] += 1
         elif not attempt.is_correct:

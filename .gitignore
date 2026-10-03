@@ -1,12 +1,21 @@
 # Dataset build scripts: kept locally, not committed
 scripts/
 
+# Trained models are hundreds of MB. Both spellings: the GGUF lands in model/,
+# train_diagnosis_model.py writes models/relearn-diagnosis/.
+model/
+models/
+
 # Local-only guide for training the model
 train_model.md
 
-# Python environment and trained models (too big for git)
+*.md
+
+# Python environment
 .venv/
-models/
+
+# Local database files, including the one the server creates next to itself
+*.db
 
 # Playwright MCP browser-testing artifacts
 .playwright-mcp/

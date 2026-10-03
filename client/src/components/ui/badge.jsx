@@ -37,4 +37,8 @@ function Badge({ className, variant, asChild = false, ...props }) {
   );
 }
 
+// The cva variants live beside their component in shadcn's layout and are
+// imported by other components. react-refresh only wants component exports
+// from a module, so the rule is turned off for this one line.
+// eslint-disable-next-line react-refresh/only-export-components
 export { Badge, badgeVariants };

@@ -9,6 +9,12 @@ from ..deps import DbDep, DiagnoserDep, LibraryDep, SettingsDep
 from ..models import Learner, QuizSession
 from ..schemas import AnswerIn, SessionCreate, Step
 
+# Starlette renamed this constant; getattr keeps both versions working and
+# keeps the deprecation warning out of the test output.
+UNPROCESSABLE = getattr(
+    status, "HTTP_422_UNPROCESSABLE_CONTENT", None
+) or status.HTTP_422_UNPROCESSABLE_ENTITY
+
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
@@ -32,14 +38,14 @@ def create_session(
     known = {topic for topic, _ in library.topic_counts()} | {"mixed"}
     if payload.topic not in known:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            UNPROCESSABLE,
             f"unknown topic {payload.topic!r}; expected one of {sorted(known)}",
         )
 
     try:
         return flow.start_session(db, library, settings, payload.learner_id, payload.topic)
     except flow.FlowError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(UNPROCESSABLE, str(exc)) from exc
 
 
 @router.get("/{session_id}", response_model=Step)

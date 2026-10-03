@@ -39,7 +39,7 @@ function ChartContainer({ id, className, children, config, ...props }) {
 }
 
 const ChartStyle = ({ id, config }) => {
-  const colorConfig = Object.entries(config).filter(([_, c]) => c.theme || c.color);
+  const colorConfig = Object.entries(config).filter(([, c]) => c.theme || c.color);
 
   if (!colorConfig.length) return null;
 

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { lazy, Suspense, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -7,8 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { CodeEditor } from "@/components/CodeEditor"
 import { CodeViewer } from "@/components/CodeViewer"
+
+// CodeMirror is most of the bundle and is only needed for write_code
+// items, which SERVE_WRITE_CODE turns off by default. Loading it on
+// demand keeps the predict_output path - the whole demo - light.
+const CodeEditor = lazy(async () => ({
+  default: (await import("@/components/CodeEditor")).CodeEditor,
+}))
 
 /**
  * One problem, the answer box, and the required one-line reason.
@@ -75,7 +81,15 @@ export function AskPanel({ step, onSubmit, submitting, error }) {
               )}
               <div className="space-y-2">
                 <Label>Your code</Label>
-                <CodeEditor value={response} onChange={setResponse} disabled={submitting} />
+                <Suspense
+                  fallback={
+                    <div className="flex h-[240px] items-center justify-center rounded-md border text-sm text-muted-foreground">
+                      Loading the editor...
+                    </div>
+                  }
+                >
+                  <CodeEditor value={response} onChange={setResponse} disabled={submitting} />
+                </Suspense>
               </div>
             </>
           ) : (

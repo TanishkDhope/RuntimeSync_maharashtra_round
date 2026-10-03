@@ -6,10 +6,13 @@ install. The query text format below must match the training format exactly.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
-from ..data import Library, Problem
+from ..data import Library, Misconception, Problem
 from .base import Candidate
+
+log = logging.getLogger("relearn")
 
 
 def build_query_text(
@@ -54,8 +57,18 @@ class ModelDiagnoser:
         self._library = library
         self._query_prompt = query_prompt
         self._doc_prompt = doc_prompt
-        # EmbeddingGemma does not support float16.
-        self._model = SentenceTransformer(str(model_dir), model_kwargs={"torch_dtype": "float32"})
+        if not query_prompt or not doc_prompt:
+            # Training prefixed every input with a prompt. Serving without one
+            # embeds into a different place in the space, and the symptom is
+            # quietly mediocre rankings rather than an error.
+            log.warning(
+                "QUERY_PROMPT/DOC_PROMPT are empty. If the model was trained "
+                "with prompts (EmbeddingGemma was), set both in .env to the "
+                "values training used, or rankings will be degraded."
+            )
+        # EmbeddingGemma does not support float16, so load in float32.
+        # `dtype` replaced `torch_dtype` in transformers 4.56.
+        self._model = SentenceTransformer(str(model_dir), model_kwargs={"dtype": "float32"})
 
         self._ids = [m.misconception_id for m in library.ranked_misconceptions()]
         descriptions = [library.misconception(i).description for i in self._ids]
@@ -86,3 +99,14 @@ class ModelDiagnoser:
             key=lambda c: -c.score,
         )
         return ranked
+
+    def add_misconception(self, misconception: 'Misconception') -> None:
+        self._ids.append(misconception.misconception_id)
+        new_embedding = self._model.encode(
+            [misconception.description],
+            prompt=self._doc_prompt or None,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+        )
+        import numpy as np
+        self._doc_embeddings = np.vstack([self._doc_embeddings, new_embedding])
