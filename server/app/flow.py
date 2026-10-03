@@ -17,6 +17,7 @@ from .checking import check_predict_output
 from .config import Settings
 from .data import Library, Problem
 from .diagnosis.base import Candidate, Diagnoser
+from .guardrails import check_reason
 from .models import Attempt, LearnerMisconception, QuizSession
 from .runner import run_write_code
 from .schemas import (
@@ -38,11 +39,27 @@ from .schemas import (
 )
 
 TOP_N = 3
+# How many candidates the LLM reranker gets to choose between. Reranking a
+# list already cut to TOP_N capped accuracy at the retriever's top-3: when the
+# right belief sat at rank 4 it was never on the ballot, and the reranker
+# answered "none of these", which sent a well-covered error down the
+# generation path. Scoped candidate sets are 3-5 long, so this cap only bites
+# on the fall back to the whole library.
+RERANK_POOL = 10
 _PREFERRED_SPLITS = ("train", "validation")
 
 
 class FlowError(Exception):
     """A request that does not fit the current state of the session."""
+
+
+class ReasonRejected(FlowError):
+    """The stated reason was refused by the guardrail (app/guardrails.py).
+
+    A FlowError subclass so existing handlers still turn it into a 409 with
+    the message shown to the learner, but distinguishable for a router that
+    wants to answer 422 instead.
+    """
 
 
 # --- problem selection ------------------------------------------------------
@@ -164,7 +181,12 @@ def _grade(
     student_response: str,
     student_explanation: str,
 ) -> tuple[bool, list[dict] | None, list[Candidate]]:
-    """Check the answer and, when it is wrong, diagnose it. No database work."""
+    """Check the answer and, when it is wrong, diagnose it. No database work.
+
+    Returns the diagnoser's full candidate list, not the top TOP_N: the
+    reranker downstream needs the whole ballot. Trimming for display is the
+    caller's last step.
+    """
     problem = library.problem(quiz.problem_queue[quiz.cursor])
 
     test_results: list[dict] | None = None
@@ -184,7 +206,7 @@ def _grade(
 
     ranked: list[Candidate] = []
     if not is_correct:
-        ranked = diagnoser.rank(problem, student_response, student_explanation)[:TOP_N]
+        ranked = diagnoser.rank(problem, student_response, student_explanation)
     return is_correct, test_results, ranked
 
 
@@ -203,6 +225,18 @@ def submit_answer(
         raise FlowError("this answer was already graded; continue to the next problem")
     if quiz.cursor >= len(quiz.problem_queue):
         raise FlowError("no problem is waiting for an answer")
+
+    # Guardrail the stated reason before claiming the slot, so a refused
+    # submission leaves the session in "asking" and the learner can edit and
+    # resubmit. Checking after the claim would burn the attempt.
+    verdict = check_reason(
+        settings,
+        library.problem(quiz.problem_queue[quiz.cursor]),
+        student_response,
+        student_explanation,
+    )
+    if verdict is not None and verdict.rejection:
+        raise ReasonRejected(verdict.rejection)
 
     # Claim the answer slot before doing any work. Two quick clicks both pass
     # the state checks above, and without this both would write an attempt
@@ -226,20 +260,31 @@ def submit_answer(
 
         if not is_correct and ranked and settings.llm_api_key:
             from .rerank import rerank_candidates
-            ranked = rerank_candidates(settings, library, problem, student_response, student_explanation, ranked)
+            ranked = rerank_candidates(
+                settings,
+                library,
+                problem,
+                student_response,
+                student_explanation,
+                ranked[:RERANK_POOL],
+            )
 
         scores = [c.score for c in ranked]
         if not is_correct and (not scores or scores[0] < settings.unknown_threshold) and settings.llm_api_key:
             from .generation import generate_misconception
             import hashlib
-            
+
             new_desc = generate_misconception(settings, problem, student_response, student_explanation)
             new_id = f"LLM_GEN_{hashlib.sha256(new_desc.encode()).hexdigest()[:8]}"
-            
+
             m = library.add_generated_misconception(new_id, new_desc, problem.topic)
             diagnoser.add_misconception(m)
-            
-            ranked = diagnoser.rank(problem, student_response, student_explanation)[:TOP_N]
+
+            ranked = diagnoser.rank(problem, student_response, student_explanation)
+
+        # Trim for display only, once every reranking step has had the full
+        # ballot to work from.
+        ranked = ranked[:TOP_N]
 
     except Exception:
         # Hand the slot back, or the session is wedged in "grading" and the
@@ -268,6 +313,7 @@ def submit_answer(
         # whatever DIAGNOSER happens to be set to then (review 3.1).
         diagnoser=diagnoser.name,
         test_results=test_results,
+        reason_guardrail=verdict.as_row() if verdict else None,
     )
     quiz.state = "feedback"
     db.add(attempt)

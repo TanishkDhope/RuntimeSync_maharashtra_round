@@ -73,6 +73,13 @@ def answer(
             payload.student_response,
             payload.student_explanation,
         )
+    # A refused reason is a problem with what was submitted, not with the
+    # state of the session, so it answers 422 and the client can show the
+    # message against the reason field. Must precede the FlowError arm.
+    except flow.ReasonRejected as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
+        ) from exc
     except flow.FlowError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 

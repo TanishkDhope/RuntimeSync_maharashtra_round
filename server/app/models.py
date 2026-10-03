@@ -66,6 +66,11 @@ class Attempt(SQLModel, table=True):
     # never be relabelled "trained model" when an old session is reopened.
     diagnoser: str = Field(default="stub", max_length=20)
     test_results: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
+    # What the guardrail decision model made of student_explanation, or None
+    # when the check was off or could not run (app/guardrails.py). Recorded so
+    # the quality thresholds can be chosen from real sessions rather than by
+    # eye; only the injection score acts on anything today.
+    reason_guardrail: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=_now)
 
 

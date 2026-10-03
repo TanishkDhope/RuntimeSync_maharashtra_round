@@ -71,6 +71,7 @@ class ModelDiagnoser:
         self._model = SentenceTransformer(str(model_dir), model_kwargs={"dtype": "float32"})
 
         self._ids = [m.misconception_id for m in library.ranked_misconceptions()]
+        self._row = {mid: i for i, mid in enumerate(self._ids)}
         descriptions = [library.misconception(i).description for i in self._ids]
         # Description embeddings never change, so compute them once.
         self._doc_embeddings = self._model.encode(
@@ -86,6 +87,17 @@ class ModelDiagnoser:
         student_response: str,
         student_explanation: str,
     ) -> list[Candidate]:
+        # Only the beliefs this problem can plausibly produce, not all 50
+        # (Library.candidate_misconceptions explains why this matters).
+        candidates = [
+            mid
+            for mid in self._library.candidate_misconceptions(problem)
+            if mid in self._row
+        ]
+        if not candidates:
+            candidates = list(self._ids)
+        rows = [self._row[mid] for mid in candidates]
+
         query = build_query_text(problem, student_response, student_explanation)
         embedding = self._model.encode(
             [query],
@@ -93,14 +105,18 @@ class ModelDiagnoser:
             normalize_embeddings=True,
             convert_to_numpy=True,
         )[0]
-        similarities = self._doc_embeddings @ embedding  # both normalised: cosine
+        # Both normalised: a dot product is the cosine similarity.
+        similarities = self._doc_embeddings[rows] @ embedding
         ranked = sorted(
-            (Candidate(misconception_id=i, score=float(s)) for i, s in zip(self._ids, similarities)),
+            (Candidate(misconception_id=i, score=float(s)) for i, s in zip(candidates, similarities)),
             key=lambda c: -c.score,
         )
         return ranked
 
     def add_misconception(self, misconception: 'Misconception') -> None:
+        if misconception.misconception_id in self._row:
+            return
+        self._row[misconception.misconception_id] = len(self._ids)
         self._ids.append(misconception.misconception_id)
         new_embedding = self._model.encode(
             [misconception.description],
