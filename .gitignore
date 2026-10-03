@@ -1,2 +1,5 @@
 # Dataset build scripts: kept locally, not committed
 scripts/
+
+# Playwright MCP browser-testing artifacts
+.playwright-mcp/

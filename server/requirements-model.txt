@@ -1,0 +1,3 @@
+# Only needed when DIAGNOSER=model. The stub path does not import these.
+sentence-transformers>=3.0
+torch>=2.2
