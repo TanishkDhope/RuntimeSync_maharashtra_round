@@ -141,6 +141,37 @@ class FeedbackStep(BaseModel):
     has_next: bool
 
 
+class ProbeOut(BaseModel):
+    id: int
+    problem_id: str
+    item_type: Literal["predict_output"] = "predict_output"
+    topic: str
+    problem_text: str
+    candidate_count: int
+
+
+class ProbeStep(BaseModel):
+    step: Literal["probe"] = "probe"
+    session_id: int
+    progress: Progress
+    probe: ProbeOut
+    # Retained for clients that already render the Diagnose tie indicator.
+    tied: bool = True
+
+
+class ProbeResult(BaseModel):
+    status: Literal["confirmed", "uncertain", "ambiguous"]
+    display_message: str
+
+
+class ProbeResultStep(BaseModel):
+    step: Literal["probe_result"] = "probe_result"
+    session_id: int
+    progress: Progress
+    result: ProbeResult
+    has_next: bool
+
+
 class SummaryMisconception(BaseModel):
     misconception_id: str
     description: str
@@ -171,7 +202,7 @@ class SummaryStep(BaseModel):
     undiagnosed_count: int = 0
 
 
-Step = AskStep | FeedbackStep | SummaryStep
+Step = AskStep | FeedbackStep | ProbeStep | ProbeResultStep | SummaryStep
 
 
 # --- requests ---------------------------------------------------------------
@@ -192,3 +223,14 @@ class AnswerIn(BaseModel):
         if not stripped:
             raise ValueError("a one-line reason is required")
         return stripped
+
+
+class ProbeAnswerIn(BaseModel):
+    student_response: str
+
+    @field_validator("student_response")
+    @classmethod
+    def _require_response(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("a probe answer is required")
+        return value

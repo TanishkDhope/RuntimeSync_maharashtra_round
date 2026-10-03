@@ -72,11 +72,9 @@ class Library:
             split="generated",
         )
         self.misconceptions[misconception_id] = m
-        if self.data_dir:
-            jsonl_path = self.data_dir / "misconceptions.jsonl"
-            import json
-            with jsonl_path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(m.__dict__) + "\n")
+        # Generated hypotheses belong to the live diagnoser/session, not the
+        # curated read-only training library. Persisting them to JSONL made a
+        # failed optional provider call mutate future sessions and tests.
         return m
 
     def problems_for_topic(self, topic: str | None) -> list[Problem]:

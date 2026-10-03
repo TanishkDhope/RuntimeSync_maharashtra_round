@@ -31,7 +31,7 @@ class LlmHealth:
 
 def check_llm(settings: Settings) -> LlmHealth:
     provider = (settings.llm_provider or "").strip().lower()
-    model = (settings.llm_model or "").strip()
+    model = settings.resolved_llm_model.strip()
 
     if not provider or not model:
         return LlmHealth(
@@ -46,7 +46,7 @@ def check_llm(settings: Settings) -> LlmHealth:
     if provider == "ollama":
         return _check_ollama(settings.ollama_base_url, model)
     if provider in {"gemini", "google", "google-genai"}:
-        return _check_gemini(settings.llm_api_key, model)
+        return _check_gemini(settings.resolved_llm_api_key, model)
     if provider == "groq":
         return _check_groq(settings.llm_api_key, model)
 

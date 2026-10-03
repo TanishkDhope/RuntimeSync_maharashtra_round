@@ -47,6 +47,18 @@ class Settings(BaseSettings):
     llm_provider: str = ""
     llm_model: str = ""
     llm_api_key: str = ""
+    # Kept separate for the common Gemini setup, while LLM_API_KEY remains
+    # supported by the existing provider abstraction.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
+    @property
+    def resolved_llm_model(self) -> str:
+        return self.llm_model or (self.gemini_model if self.llm_provider.lower() == "gemini" else "")
+
+    @property
+    def resolved_llm_api_key(self) -> str:
+        return self.llm_api_key or self.gemini_api_key
 
     # Paths
     data_dir: str = "../data"

@@ -36,6 +36,11 @@ def settings(tmp_path) -> Settings:
         session_length=3,
         run_timeout_seconds=3.0,
         serve_write_code=True,
+        # Tests must not inherit a developer's optional provider credentials.
+        llm_provider="",
+        llm_model="",
+        llm_api_key="",
+        gemini_api_key="",
     )
 
 

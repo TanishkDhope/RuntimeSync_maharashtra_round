@@ -44,6 +44,9 @@ class QuizSession(SQLModel, table=True):
     state: str = Field(default="asking", max_length=20)
     problem_queue: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     cursor: int = Field(default=0)
+    # Logical pointer rather than a foreign key: probes already reference the
+    # session and a two-way FK creates an avoidable SQLite DDL cycle.
+    active_probe_id: int | None = Field(default=None)
     started_at: datetime = Field(default_factory=_now)
 
 
@@ -66,4 +69,23 @@ class Attempt(SQLModel, table=True):
     # never be relabelled "trained model" when an old session is reopened.
     diagnoser: str = Field(default="stub", max_length=20)
     test_results: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Probe(SQLModel, table=True):
+    """A persisted diagnostic question and its server-only predictions."""
+
+    __tablename__ = "probes"
+
+    id: int | None = Field(default=None, primary_key=True)
+    session_id: int = Field(foreign_key="sessions.id", index=True)
+    problem_id: str | None = Field(default=None, max_length=40)
+    topic: str = Field(max_length=40)
+    program: str
+    actual_output: str
+    candidate_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    candidate_predictions: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
+    source: str = Field(max_length=12)  # bank | gemini
+    result_status: str | None = Field(default=None, max_length=12)
+    submitted_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=_now)

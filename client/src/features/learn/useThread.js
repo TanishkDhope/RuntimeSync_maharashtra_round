@@ -57,11 +57,18 @@ export function useThread(sessionId) {
     onError: resync,
   })
 
+  const probe = useMutation({
+    mutationFn: (response) => api.probe(sessionId, response),
+    onSuccess: append,
+    onError: resync,
+  })
+
   return {
     steps,
     loading: steps.length === 0 && current.isPending,
     loadError: steps.length === 0 ? current.error : null,
     answer,
+    probe,
     advance,
   }
 }

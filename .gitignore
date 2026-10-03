@@ -16,6 +16,8 @@ train_model.md
 
 # Local database files, including the one the server creates next to itself
 *.db
+.env
+server/.env
 
 # Playwright MCP browser-testing artifacts
 .playwright-mcp/

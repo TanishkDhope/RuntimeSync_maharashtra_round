@@ -42,7 +42,10 @@ export function CaseView({ c, live, thread }) {
       />
       {c.graded && !c.correct && c.diagnosis && <DiagnoseSection c={c} folded={fold("diagnose")} />}
       {c.probe && (
-        <ProbeSection c={c} folded={fold("probe")} interactive={live && last?.step === "probe"} form={form} />
+        <ProbeSection c={c} folded={fold("probe")} interactive={live && last?.step === "probe"} form={{
+          onSubmit: (response) => thread.probe.mutate(response), busy: thread.probe.isPending,
+          busyLabel: "Checking your diagnostic response…", error: thread.probe.error,
+        }} />
       )}
       {c.intervention && <ExplainSection c={c} folded={fold("explain")} />}
       {c.retest.items.length > 0 && (
@@ -58,7 +61,7 @@ export function CaseView({ c, live, thread }) {
           busyLabel={busyLabel(c, "next")}
           error={thread.advance.error}
           note={
-            c.legacy && !c.correct
+            c.legacy && !c.correct && !c.probe
               ? "The backend doesn't serve the probe, explanation and retest steps yet."
               : undefined
           }

@@ -274,6 +274,35 @@ def run_write_code(
     return all(row["passed"] for row in results), results
 
 
+def run_probe_program(program: str, timeout_seconds: float) -> str | None:
+    """Run a generated/output-bank program in the same isolated subprocess.
+
+    Unlike write-code grading, a probe needs stdout itself. It still goes
+    through the AST screen, minimal environment, isolated interpreter and
+    timeout; it is never executed in the API process.
+    """
+    if screen_student_code(program) is not None:
+        return None
+    with tempfile.TemporaryDirectory(prefix="relearn-probe-") as workdir:
+        script_path = Path(workdir) / "probe.py"
+        script_path.write_text(program, encoding="utf-8")
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-S", "-B", str(script_path)],
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                stdin=subprocess.DEVNULL,
+                env=_subprocess_env(workdir),
+            )
+        except subprocess.TimeoutExpired:
+            return None
+    if completed.returncode != 0 or len(completed.stdout) > MAX_VALUE_CHARS:
+        return None
+    return completed.stdout.rstrip("\r\n")
+
+
 def _failure_reason(completed: subprocess.CompletedProcess) -> str:
     detail = (completed.stderr or "").strip().splitlines()
     if not detail:

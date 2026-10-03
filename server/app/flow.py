@@ -18,11 +18,17 @@ from .config import Settings
 from .data import Library, Problem
 from .diagnosis.base import Candidate, Diagnoser
 from .models import Attempt, QuizSession
+from .models import Probe
+from .probes import create_probe, match_probe_answer, needs_probe
 from .runner import run_write_code
 from .schemas import (
     AskStep,
     DiagnosisCandidate,
     FeedbackStep,
+    ProbeOut,
+    ProbeResult,
+    ProbeResultStep,
+    ProbeStep,
     ProblemOut,
     Progress,
     SummaryAttempt,
@@ -145,6 +151,14 @@ def current_step(db: Session, library: Library, settings: Settings, quiz: QuizSe
         attempt = _latest_attempt(db, quiz)
         if attempt is not None:
             return _feedback_step(library, settings, quiz, attempt)
+    if quiz.state == "probing" and quiz.active_probe_id:
+        probe = db.get(Probe, quiz.active_probe_id)
+        if probe:
+            return _probe_step(quiz, probe)
+    if quiz.state == "probe_result" and quiz.active_probe_id:
+        probe = db.get(Probe, quiz.active_probe_id)
+        if probe:
+            return _probe_result_step(quiz, probe)
     # "grading" means a submission is in flight or crashed mid-flight; either
     # way the problem is still the thing to show.
     return _ask_step(library, quiz)
@@ -190,7 +204,7 @@ def submit_answer(
     quiz: QuizSession,
     student_response: str,
     student_explanation: str,
-) -> FeedbackStep:
+) -> FeedbackStep | ProbeStep:
     if quiz.state == "done":
         raise FlowError("this session is finished")
     if quiz.state == "feedback":
@@ -270,7 +284,57 @@ def submit_answer(
     db.refresh(attempt)
     db.refresh(quiz)
 
+    candidate_ids = [c.misconception_id for c in ranked[:2]]
+    if not is_correct and needs_probe([c.score for c in ranked], settings.probe_gap):
+        seen = set(db.exec(select(Attempt.problem_id).where(Attempt.learner_id == quiz.learner_id)).all())
+        draft = create_probe(library, settings, problem, candidate_ids, seen)
+        if draft is not None:
+            probe = Probe(
+                session_id=quiz.id,
+                problem_id=draft.problem_id,
+                topic=draft.topic,
+                program=draft.program,
+                actual_output=draft.actual_output,
+                candidate_ids=candidate_ids,
+                candidate_predictions=draft.predictions,
+                source=draft.source,
+            )
+            quiz.state = "probing"
+            db.add(probe)
+            db.commit()
+            db.refresh(probe)
+            quiz.active_probe_id = probe.id
+            db.add(quiz)
+            db.commit()
+            db.refresh(quiz)
+            return _probe_step(quiz, probe)
     return _feedback_step(library, settings, quiz, attempt)
+
+
+def submit_probe(db: Session, library: Library, settings: Settings, quiz: QuizSession, response: str):
+    if quiz.state != "probing" or not quiz.active_probe_id:
+        raise FlowError("a probe is not waiting for an answer")
+    probe = db.get(Probe, quiz.active_probe_id)
+    if probe is None or probe.submitted_at is not None:
+        raise FlowError("this probe was already submitted")
+    status, misconception_id = match_probe_answer(probe.candidate_predictions, response)
+    # A probe is an Attempt phase, keeping history in the existing table.
+    db.add(Attempt(
+        session_id=quiz.id, learner_id=quiz.learner_id, problem_id=probe.problem_id or f"probe-{probe.id}",
+        phase="probe", student_response=response, student_explanation="diagnostic probe",
+        is_correct=False, diagnosis=([{"misconception_id": misconception_id, "score": 1.0}] if misconception_id else []),
+        diagnoser="probe",
+    ))
+    from .models import _now
+    probe.submitted_at = _now()
+    probe.result_status = status
+    quiz.state = "probe_result"
+    db.add(probe)
+    db.add(quiz)
+    db.commit()
+    db.refresh(probe)
+    db.refresh(quiz)
+    return _probe_result_step(quiz, probe)
 
 
 def advance(db: Session, library: Library, settings: Settings, quiz: QuizSession):
@@ -353,6 +417,31 @@ def _feedback_step(
         tied=is_tied(scores, settings.probe_gap),
         top_two_gap=round(scores[0] - scores[1], 4) if len(scores) > 1 else None,
         probe_gap=settings.probe_gap,
+        has_next=quiz.cursor + 1 < len(quiz.problem_queue),
+    )
+
+
+def _probe_step(quiz: QuizSession, probe: Probe) -> ProbeStep:
+    return ProbeStep(
+        session_id=quiz.id,
+        progress=Progress(index=quiz.cursor + 1, total=len(quiz.problem_queue)),
+        probe=ProbeOut(id=probe.id, problem_id=probe.problem_id or f"generated-{probe.id}", topic=probe.topic,
+                       problem_text=probe.program, candidate_count=len(probe.candidate_ids)),
+    )
+
+
+def _probe_result_step(quiz: QuizSession, probe: Probe) -> ProbeResultStep:
+    # Do not leak candidate identities or outputs; the probe only reports the
+    # strength of its evidence until a future Explain stage is built.
+    status = probe.result_status or "uncertain"
+    messages = {
+        "confirmed": "Your response provided additional evidence about your reasoning.",
+        "uncertain": "Your response did not distinguish the competing explanations.",
+        "ambiguous": "Your response matched more than one possible explanation.",
+    }
+    return ProbeResultStep(
+        session_id=quiz.id, progress=Progress(index=quiz.cursor + 1, total=len(quiz.problem_queue)),
+        result=ProbeResult(status=status, display_message=messages[status]),
         has_next=quiz.cursor + 1 < len(quiz.problem_queue),
     )
 

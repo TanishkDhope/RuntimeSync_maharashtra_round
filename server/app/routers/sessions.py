@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from .. import flow
 from ..deps import DbDep, DiagnoserDep, LibraryDep, SettingsDep
 from ..models import Learner, QuizSession
-from ..schemas import AnswerIn, SessionCreate, Step
+from ..schemas import AnswerIn, ProbeAnswerIn, SessionCreate, Step
 
 # Starlette renamed this constant; getattr keeps both versions working and
 # keeps the deprecation warning out of the test output.
@@ -73,6 +73,14 @@ def answer(
             payload.student_response,
             payload.student_explanation,
         )
+    except flow.FlowError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.post("/{session_id}/probe", response_model=Step)
+def submit_probe(session_id: int, payload: ProbeAnswerIn, db: DbDep, library: LibraryDep, settings: SettingsDep):
+    try:
+        return flow.submit_probe(db, library, settings, _load(db, session_id), payload.student_response)
     except flow.FlowError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 

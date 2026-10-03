@@ -105,10 +105,15 @@ export function buildCases(steps) {
       }
       case "probe": {
         const c = ensure()
-        c.graded = step.graded
-        c.diagnosis = step.diagnosis
         c.correct = false
         c.probe = { step, outcome: null }
+        c.last = step
+        break
+      }
+      case "probe_result": {
+        const c = ensure()
+        c.probe = { step: c.probe?.step ?? null, outcome: step.result }
+        c.hasNext = step.has_next
         c.last = step
         break
       }
@@ -192,6 +197,8 @@ export function focusPhase(c) {
     case "correct":
       return "answer"
     case "probe":
+      return "probe"
+    case "probe_result":
       return "probe"
     case "unknown":
       return "diagnose"
