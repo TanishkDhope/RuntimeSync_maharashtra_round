@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: str = ""
 
+    # Guardrails on the student's stated reason (app/guardrails.py), served by
+    # an evaluation model through Vercel's AI Gateway. Empty GUARDRAIL_MODEL
+    # turns the check off, and the flow carries on without it.
+    vercel_api_key: str = ""
+    ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/typesafe"
+    guardrail_model: str = ""
+    # Only the injection check blocks a submission. Quality is recorded and
+    # acted on by nobody until it has been calibrated against responses.jsonl;
+    # see the module docstring for why.
+    guardrail_injection_threshold: float = 0.8
+
     # Paths
     data_dir: str = "../data"
     database_url: str = "sqlite:///./relearn.db"

@@ -16,8 +16,11 @@ from pathlib import Path
 
 import pytest
 
+from app.data import load_library
 from app.diagnosis import build_diagnoser
 from app.diagnosis.ollama import OllamaDiagnoser, gguf_fingerprint
+
+from .conftest import DATA_DIR
 
 MODEL_NAME = "relearn-diagnosis"
 BASE_URL = "http://localhost:11434"
@@ -70,7 +73,10 @@ def test_ollama_unreachable_raises_a_clear_error(settings, library):
 # --- needs a running Ollama with the model registered -----------------------
 
 @pytest.mark.integration
-def test_the_diagnoser_ranks_the_whole_library(library):
+def test_the_diagnoser_ranks_only_this_problems_candidates(library):
+    """Ranking all 50 beliefs against every answer is what made the trained
+    diagnoser worse than it is: scoping the candidate set to the problem lifts
+    top-3 from 74% to 99% on held-out problems."""
     diagnoser = OllamaDiagnoser(
         library=library, model_name=MODEL_NAME, base_url=BASE_URL
     )
@@ -79,10 +85,39 @@ def test_the_diagnoser_ranks_the_whole_library(library):
     problem = library.problem("PO_VAR_03")
     ranked = diagnoser.rank(problem, "7\n2", "the = checked whether they were equal")
 
-    assert len(ranked) == len(library.ranked_misconceptions())
+    assert {c.misconception_id for c in ranked} == set(
+        library.candidate_misconceptions(problem)
+    )
+    assert len(ranked) < len(library.ranked_misconceptions())
     scores = [c.score for c in ranked]
     assert scores == sorted(scores, reverse=True), "scores must be sorted high to low"
     assert -1.0 <= scores[0] <= 1.0, "cosine similarity is bounded"
+
+
+@pytest.mark.integration
+def test_a_generated_belief_stays_rankable_on_its_own_topic():
+    """The generation path writes a belief for an answer nothing covered. If it
+    is not a candidate on the next rank() call, the description written to
+    explain that very answer can never be shown.
+
+    Loads its own Library rather than taking the session fixture: this test
+    adds a belief, and the fixture is shared with tests that assert exactly
+    which beliefs are rankable. data_dir is left unset so nothing is appended
+    to the shipped misconceptions.jsonl.
+    """
+    library = load_library(DATA_DIR)
+    library.data_dir = None
+    diagnoser = OllamaDiagnoser(
+        library=library, model_name=MODEL_NAME, base_url=BASE_URL
+    )
+    problem = library.problem("PO_VAR_03")
+    generated = library.add_generated_misconception(
+        "LLM_GEN_TEST", "Believes something no training belief covers.", problem.topic
+    )
+    diagnoser.add_misconception(generated)
+
+    ranked = diagnoser.rank(problem, "7\n2", "a reason")
+    assert "LLM_GEN_TEST" in {c.misconception_id for c in ranked}
 
 
 @pytest.mark.integration
