@@ -7,3 +7,6 @@ train_model.md
 # Python environment and trained models (too big for git)
 .venv/
 models/
+
+# Playwright MCP browser-testing artifacts
+.playwright-mcp/

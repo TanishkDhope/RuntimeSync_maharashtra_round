@@ -1,0 +1,79 @@
+"""Quiz sessions. Every response is a `step`; the frontend just renders it."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException, status
+
+from .. import flow
+from ..deps import DbDep, DiagnoserDep, LibraryDep, SettingsDep
+from ..models import Learner, QuizSession
+from ..schemas import AnswerIn, SessionCreate, Step
+
+router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+def _load(db, session_id: int) -> QuizSession:
+    quiz = db.get(QuizSession, session_id)
+    if quiz is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no session {session_id}")
+    return quiz
+
+
+@router.post("", response_model=Step, status_code=status.HTTP_201_CREATED)
+def create_session(
+    payload: SessionCreate,
+    db: DbDep,
+    library: LibraryDep,
+    settings: SettingsDep,
+):
+    if db.get(Learner, payload.learner_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no learner {payload.learner_id}")
+
+    known = {topic for topic, _ in library.topic_counts()} | {"mixed"}
+    if payload.topic not in known:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"unknown topic {payload.topic!r}; expected one of {sorted(known)}",
+        )
+
+    try:
+        return flow.start_session(db, library, settings, payload.learner_id, payload.topic)
+    except flow.FlowError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+
+@router.get("/{session_id}", response_model=Step)
+def read_session(session_id: int, db: DbDep, library: LibraryDep, settings: SettingsDep):
+    """The step this session is sitting on, so a page refresh resumes it."""
+    return flow.current_step(db, library, settings, _load(db, session_id))
+
+
+@router.post("/{session_id}/answer", response_model=Step)
+def answer(
+    session_id: int,
+    payload: AnswerIn,
+    db: DbDep,
+    library: LibraryDep,
+    settings: SettingsDep,
+    diagnoser: DiagnoserDep,
+):
+    try:
+        return flow.submit_answer(
+            db,
+            library,
+            settings,
+            diagnoser,
+            _load(db, session_id),
+            payload.student_response,
+            payload.student_explanation,
+        )
+    except flow.FlowError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.post("/{session_id}/next", response_model=Step)
+def next_step(session_id: int, db: DbDep, library: LibraryDep, settings: SettingsDep):
+    try:
+        return flow.advance(db, library, settings, _load(db, session_id))
+    except flow.FlowError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
