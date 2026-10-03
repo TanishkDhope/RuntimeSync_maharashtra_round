@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: str = ""
 
+    # Guardrails on the student's stated reason (app/guardrails.py), served by
+    # an evaluation model through Vercel's AI Gateway. Empty GUARDRAIL_MODEL
+    # turns the check off, and the flow carries on without it.
+    vercel_api_key: str = ""
+    ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/typesafe"
+    guardrail_model: str = ""
+    guardrail_injection_threshold: float = 0.8
+    # A reason scoring below guardrails.MIN_QUALITY_LEVEL is refused, but only
+    # when the model is at least this confident in the level it picked. Terse
+    # reasons diagnose fine, so an unreadable one gets the benefit of the
+    # doubt rather than costing the learner their answer.
+    guardrail_min_confidence: float = 0.3
+
     # Paths
     data_dir: str = "../data"
     database_url: str = "sqlite:///./relearn.db"
