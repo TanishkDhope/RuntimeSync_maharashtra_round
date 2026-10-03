@@ -229,11 +229,8 @@ def submit_answer(
         student_response,
         student_explanation,
     )
-    if verdict is not None and verdict.blocked:
-        raise ReasonRejected(
-            "That reason reads as instructions aimed at the system rather than "
-            "your own thinking. Say why you think the code produces that output."
-        )
+    if verdict is not None and verdict.rejection:
+        raise ReasonRejected(verdict.rejection)
 
     # Claim the answer slot before doing any work. Two quick clicks both pass
     # the state checks above, and without this both would write an attempt

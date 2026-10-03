@@ -54,10 +54,12 @@ class Settings(BaseSettings):
     vercel_api_key: str = ""
     ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/typesafe"
     guardrail_model: str = ""
-    # Only the injection check blocks a submission. Quality is recorded and
-    # acted on by nobody until it has been calibrated against responses.jsonl;
-    # see the module docstring for why.
     guardrail_injection_threshold: float = 0.8
+    # A reason scoring below guardrails.MIN_QUALITY_LEVEL is refused, but only
+    # when the model is at least this confident in the level it picked. Terse
+    # reasons diagnose fine, so an unreadable one gets the benefit of the
+    # doubt rather than costing the learner their answer.
+    guardrail_min_confidence: float = 0.3
 
     # Paths
     data_dir: str = "../data"
