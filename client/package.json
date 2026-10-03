@@ -41,5 +41,6 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "vite": "^7.2.4"
-  }
+  },
+  "description": "Re:Learn frontend: the Learn screen, driven entirely by the backend's step field."
 }

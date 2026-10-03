@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from app.runner import run_write_code
+from app.runner import MAX_VALUE_CHARS, run_write_code, screen_student_code
 
 TIMEOUT = 3.0
 
@@ -102,16 +102,17 @@ def test_printing_instead_of_returning_fails(library):
     assert results[0]["got"] == "None"
 
 
-def test_student_file_writes_do_not_touch_the_repo(library, tmp_path):
-    """The subprocess runs in a temp cwd, so a relative write lands there."""
+def test_student_file_writes_are_rejected_and_never_reach_the_repo(library):
+    """open() is screened out, so the write never happens anywhere."""
     problem = library.problem("WC_01")
     marker = "relearn_should_not_exist.txt"
     code = (
         f"open({marker!r}, 'w').write('x')\n"
         "def sum_to(n):\n    return sum(range(1, n + 1))"
     )
-    is_correct, _ = run_write_code(problem, code, TIMEOUT)
-    assert is_correct is True
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+    assert is_correct is False
+    assert "open() is not allowed" in results[0]["error"]
     assert not (Path.cwd() / marker).exists()
 
 
@@ -125,3 +126,84 @@ def test_student_code_cannot_see_the_server_modules(library):
     is_correct, results = run_write_code(problem, code, TIMEOUT)
     assert is_correct is False
     assert "ModuleNotFoundError" in results[0]["error"]
+
+
+# --- hostile answers (review 1.2, 1.3) --------------------------------------
+
+def test_reading_the_server_env_file_is_rejected(library):
+    """The attack from the review: open the server's own .env and return it."""
+    problem = library.problem("WC_01")
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    code = f"def sum_to(n):\n    return open({str(env_path)!r}).read()"
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+
+    assert is_correct is False
+    assert "open() is not allowed" in results[0]["error"]
+    # Nothing from the file comes back, whatever the file holds.
+    assert results[0]["got"] is None
+
+
+def test_importing_os_is_rejected(library):
+    problem = library.problem("WC_01")
+    code = "import os\ndef sum_to(n):\n    return os.environ.get('PATH')"
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+    assert is_correct is False
+    assert "importing 'os' is not allowed" in results[0]["error"]
+
+
+def test_dunder_class_walk_is_rejected(library):
+    """The usual escape: reach the subprocess builtins through any object."""
+    problem = library.problem("WC_01")
+    code = "def sum_to(n):\n    return ().__class__.__bases__"
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+    assert is_correct is False
+    assert "not allowed" in results[0]["error"]
+
+
+def test_printing_the_old_results_marker_does_not_break_grading(library):
+    """Results travel through a file now, so stdout cannot corrupt the parse."""
+    problem = library.problem("WC_01")
+    code = (
+        'print("__RELEARN_RESULTS__" + "{bogus json")\n'
+        "def sum_to(n):\n    return sum(range(1, n + 1))"
+    )
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+    assert is_correct is True
+    assert all(row["passed"] for row in results)
+
+
+def test_a_huge_return_value_is_clipped(library):
+    problem = library.problem("WC_01")
+    code = f"def sum_to(n):\n    return 'x' * {MAX_VALUE_CHARS * 20}"
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+    assert is_correct is False
+    assert len(results[0]["got"]) < MAX_VALUE_CHARS + 60
+    assert "more characters" in results[0]["got"]
+
+
+def test_the_subprocess_does_not_inherit_the_server_environment(monkeypatch, library):
+    """A secret in the server's env must not be readable from student code."""
+    monkeypatch.setenv("RELEARN_TEST_SECRET", "hunter2")
+    problem = library.problem("WC_01")
+    # A late import dodges the screen's module check, so this also proves the
+    # environment itself is empty rather than relying on the screen alone.
+    code = (
+        "def sum_to(n):\n"
+        "    import os\n"
+        "    return os.environ.get('RELEARN_TEST_SECRET')"
+    )
+    is_correct, results = run_write_code(problem, code, TIMEOUT)
+    assert is_correct is False
+    assert "hunter2" not in str(results[0])
+
+
+def test_screening_passes_ordinary_answers(library):
+    """The screen must not reject the kind of code a student really writes."""
+    for problem in library.problems.values():
+        if problem.item_type != "write_code":
+            continue
+        assert screen_student_code(problem.reference_solution) is None, problem.problem_id
+
+
+def test_a_syntax_error_is_not_treated_as_a_rejection():
+    assert screen_student_code("def f(\n") is None

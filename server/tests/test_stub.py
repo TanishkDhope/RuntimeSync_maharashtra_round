@@ -17,11 +17,25 @@ def test_build_diagnoser_returns_the_stub_by_default(settings, library):
 
 def test_matching_predicted_output_scores_high(library):
     stub = StubDiagnoser(library)
-    problem = library.problem("PO_VAR_02")  # VAR_KEEPS_FIRST_VALUE -> "5 10 5"
-    ranked = stub.rank(problem, "5 10 5", "x never changed")
-    assert ranked[0].misconception_id == "VAR_KEEPS_FIRST_VALUE"
+    problem = library.problem("PO_VAR_03")  # ASSIGN_COMPARES -> "7\n2"
+    ranked = stub.rank(problem, "7\n2", "the = checked whether they were equal")
+    assert ranked[0].misconception_id == "ASSIGN_COMPARES"
     assert ranked[0].score == MATCH_SCORE
     assert ranked[1].score < MATCH_SCORE
+
+
+def test_a_held_out_belief_is_not_named_even_when_its_output_matches(library):
+    """PO_VAR_02 is a test-split problem whose "5 10 5" belongs to a held-out
+    belief (VAR_KEEPS_FIRST_VALUE). The ranked library is train-split only
+    (brief s5), so the honest answer is a low-confidence guess, not a
+    confident name for a belief the model was never trained on.
+    """
+    stub = StubDiagnoser(library)
+    problem = library.problem("PO_VAR_02")
+    ranked = stub.rank(problem, "5 10 5", "x never changed")
+
+    assert "VAR_KEEPS_FIRST_VALUE" not in {c.misconception_id for c in ranked}
+    assert ranked[0].score < MATCH_SCORE, "an unseen belief must not score as a match"
 
 
 def test_confusable_pair_is_returned_as_a_tie(library):
@@ -179,3 +193,29 @@ def test_a_one_question_run_is_not_only_a_code_question(library):
     chosen = choose_problems(library, "lists", 1, set(), random.Random(7))
     assert len(chosen) == 1
     assert library.problem(chosen[0]).item_type == "predict_output"
+
+
+def test_the_stub_never_ranks_a_held_out_misconception(library):
+    """Only split=train beliefs are rankable (brief s5), on every problem.
+
+    Test-split problems can list held-out misconceptions, and a session draws
+    those once the train and validation pools run out.
+    """
+    diagnoser = StubDiagnoser(library=library)
+    held_out = {
+        m.misconception_id
+        for m in library.misconceptions.values()
+        if m.split != "train"
+    }
+    assert held_out, "the dataset should have held-out misconceptions to guard against"
+
+    checked = 0
+    for problem in library.problems.values():
+        if not held_out.intersection(problem.applicable_misconceptions):
+            continue
+        checked += 1
+        ranked = diagnoser.rank(problem, "definitely wrong", "a guess")
+        assert not held_out.intersection(c.misconception_id for c in ranked), (
+            problem.problem_id
+        )
+    assert checked, "no problem in the dataset lists a held-out misconception"

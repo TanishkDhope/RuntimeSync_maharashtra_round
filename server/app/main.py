@@ -42,16 +42,20 @@ async def lifespan(app: FastAPI):
     log.info("diagnoser: %s", diagnoser.name)
 
     backend = describe_backend(settings)
-    engine = build_engine(settings)
+    engine = None
     connected = False
     try:
+        # build_engine itself can raise: a postgresql:// URL with no psycopg
+        # installed fails on import, not on connect. It belongs inside the try
+        # so /health can report the failure instead of the server dying.
+        engine = build_engine(settings)
         with engine.connect() as connection:
             connection.execute(text("select 1"))
         create_tables(engine)
         connected = True
         log.info("database ready (%s)", backend)
     except Exception as exc:  # noqa: BLE001 - startup must report, not crash
-        # A paused Supabase project or missing network should not stop the
+        # A paused Supabase project or missing driver should not stop the
         # server from starting: /health reports the failure instead.
         log.error("database unavailable (%s): %s", backend, exc)
 
@@ -64,7 +68,8 @@ async def lifespan(app: FastAPI):
         database_connected=connected,
     )
     yield
-    engine.dispose()
+    if engine is not None:
+        engine.dispose()
 
 
 def create_app() -> FastAPI:
