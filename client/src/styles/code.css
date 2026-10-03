@@ -1,0 +1,77 @@
+/*
+ * Syntax colours for the (always dark) code panel and editor. Both use
+ * @lezer/highlight's classHighlighter, so one set of tok-* rules styles the
+ * read-only viewer and the CodeMirror editor alike.
+ */
+.code-surface {
+  --tok-keyword: #f2a271;
+  --tok-string: #a8d18d;
+  --tok-number: #e6c07b;
+  --tok-def: #8fb7ff;
+  --tok-builtin: #7fd1c7;
+  --tok-comment: #7c7f87;
+  --tok-punct: #a9a7a2;
+  color: var(--code-ink);
+}
+
+.code-surface .tok-keyword,
+.code-surface .tok-bool,
+.code-surface .tok-atom {
+  color: var(--tok-keyword);
+}
+.code-surface .tok-string,
+.code-surface .tok-string2 {
+  color: var(--tok-string);
+}
+.code-surface .tok-number {
+  color: var(--tok-number);
+}
+.code-surface .tok-definition,
+.code-surface .tok-className {
+  color: var(--tok-def);
+}
+.code-surface .tok-variableName2,
+.code-surface .tok-macroName {
+  color: var(--tok-builtin);
+}
+.code-surface .tok-comment {
+  color: var(--tok-comment);
+  font-style: italic;
+}
+.code-surface .tok-operator,
+.code-surface .tok-punctuation {
+  color: var(--tok-punct);
+}
+
+/* CodeMirror editor: match the viewer panel. */
+.code-surface .cm-editor {
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+}
+.code-surface .cm-editor.cm-focused {
+  outline: none;
+}
+.code-surface .cm-scroller {
+  font-family: var(--font-mono);
+  line-height: 1.65;
+}
+.code-surface .cm-gutters {
+  background: transparent;
+  border-right: 1px solid var(--code-rule);
+  color: var(--code-muted);
+}
+.code-surface .cm-activeLine,
+.code-surface .cm-activeLineGutter {
+  background: var(--code-line);
+}
+.code-surface .cm-cursor {
+  border-left-color: var(--code-ink);
+}
+.code-surface .cm-selectionBackground,
+.code-surface .cm-focused .cm-selectionBackground {
+  background: rgba(124, 140, 255, 0.28) !important;
+}
+.code-surface .cm-placeholder {
+  color: var(--code-muted);
+}

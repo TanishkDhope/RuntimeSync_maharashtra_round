@@ -1,26 +1,26 @@
-import { python } from "@codemirror/lang-python"
-import { oneDark } from "@codemirror/theme-one-dark"
-import CodeMirror from "@uiw/react-codemirror"
+import { lazy, Suspense } from "react"
 
-/** Python editor for write_code answers. */
-export function CodeEditor({ value, onChange, disabled }) {
+import { cn } from "@/lib/cn"
+
+// CodeMirror is only needed for write_code answers, so it loads on demand.
+const CodeMirrorEditor = lazy(() => import("./CodeMirrorEditor"))
+
+/** Python editor for write_code answers, styled like the read-only panel. */
+export function CodeEditor({ className, label = "your_solution.py", ...props }) {
   return (
-    <div className="overflow-hidden rounded-md border">
-      <CodeMirror
-        value={value}
-        onChange={onChange}
-        readOnly={disabled}
-        height="240px"
-        theme={oneDark}
-        extensions={[python()]}
-        basicSetup={{
-          lineNumbers: true,
-          highlightActiveLine: !disabled,
-          autocompletion: false,
-          tabSize: 4,
-        }}
-        style={{ fontSize: "15px" }}
-      />
+    <div
+      className={cn(
+        "code-surface overflow-hidden rounded-panel border border-code-rule bg-code-bg focus-within:border-accent",
+        className,
+      )}
+    >
+      <div className="flex h-9 items-center justify-between border-b border-code-rule px-4 font-mono text-[13px] text-code-muted">
+        <span>{label}</span>
+        <span>Python</span>
+      </div>
+      <Suspense fallback={<div className="h-[240px] animate-pulse bg-white/[0.02]" aria-label="Loading editor" />}>
+        <CodeMirrorEditor {...props} />
+      </Suspense>
     </div>
   )
 }

@@ -1,14 +1,22 @@
 <!doctype html>
-<!-- dark by default: this is meant to be read off a projector -->
-<html lang="en" class="dark">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Re:Learn — Python misconception diagnosis</title>
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Re:Learn</title>
+    <script>
+      // Apply the saved theme before first paint so there is no flash.
+      // Light is the default: it is what reads best on a projector.
+      try {
+        var saved = localStorage.getItem("relearn.theme")
+        if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/app/main.jsx"></script>
   </body>
 </html>
