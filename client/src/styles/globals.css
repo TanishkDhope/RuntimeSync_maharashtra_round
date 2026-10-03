@@ -1,0 +1,137 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./code.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-code-bg: var(--code-bg);
+  --color-code-ink: var(--code-ink);
+  --color-code-muted: var(--code-muted);
+  --color-code-rule: var(--code-rule);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-exec: var(--exec);
+  --color-exec-soft: var(--exec-soft);
+  --color-improving: var(--improving);
+  --color-improving-soft: var(--improving-soft);
+  --color-active: var(--active);
+  --color-active-soft: var(--active-soft);
+  --color-highlight: var(--highlight);
+  --color-hazard: var(--hazard);
+  --color-hazard-ink: var(--hazard-ink);
+
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --text-eyebrow: 12.5px;
+  --text-eyebrow--line-height: 1.2;
+  --text-eyebrow--letter-spacing: 0.08em;
+  --text-small: 14px;
+  --text-small--line-height: 1.45;
+  --text-body: 17px;
+  --text-body--line-height: 1.6;
+  --text-code: 17px;
+  --text-code--line-height: 1.65;
+  --text-h3: 20px;
+  --text-h3--line-height: 1.35;
+  --text-belief: 22px;
+  --text-belief--line-height: 1.35;
+  --text-h2: 28px;
+  --text-h2--line-height: 1.2;
+  --text-h1: 40px;
+  --text-h1--line-height: 1.1;
+  --text-display: 56px;
+  --text-display--line-height: 1;
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--paper);
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility eyebrow {
+  font-size: var(--text-eyebrow);
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Diagonal hatch used on the stub and sample-data strips. */
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 10px,
+    color-mix(in oklab, currentColor 9%, transparent) 10px 12px
+  );
+}
+
+@keyframes hairline-run {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@utility hairline-run {
+  animation: hairline-run 1.1s var(--ease-out-soft) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hairline-run {
+    animation-duration: 2.4s;
+  }
+}

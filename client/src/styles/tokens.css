@@ -1,0 +1,71 @@
+/*
+ * Colour tokens. Light ("paper and ink") is the default because it reads best
+ * on a projector; dark is the same roles re-tuned, switched with
+ * data-theme="dark" on <html>.
+ *
+ * Roles, not hues: accent = the trained model (and primary actions),
+ * exec = something we really ran, improving / active = learner status.
+ * The code panel is dark in both themes.
+ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --paper: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #efece5;
+  --ink: #17171a;
+  --ink-2: #3d3b37;
+  --muted: #6b6860;
+  --rule: #e3dfd5;
+  --rule-strong: #cfc9bc;
+
+  --code-bg: #16171b;
+  --code-ink: #e8e6e1;
+  --code-muted: #6f727b;
+  --code-rule: #2a2c32;
+  --code-line: rgba(255, 255, 255, 0.06);
+
+  --accent: #2b44e0;
+  --accent-soft: #e4e8fd;
+  --on-accent: #ffffff;
+  --exec: #2f7d4f;
+  --exec-soft: #e2f0e7;
+  --improving: #a86a12;
+  --improving-soft: #f8ecd6;
+  --active: #c8432f;
+  --active-soft: #f9e4df;
+  --highlight: #ffe58a;
+  --hazard: #f2c14e;
+  --hazard-ink: #3b2a05;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #121316;
+  --surface: #1a1b1f;
+  --surface-2: #222328;
+  --ink: #ecebe8;
+  --ink-2: #c9c7c2;
+  --muted: #9a9893;
+  --rule: #2c2d33;
+  --rule-strong: #3a3c43;
+
+  --code-bg: #0d0e10;
+  --code-ink: #e8e6e1;
+  --code-muted: #6f727b;
+  --code-rule: #24262b;
+  --code-line: rgba(255, 255, 255, 0.05);
+
+  --accent: #7c8cff;
+  --accent-soft: #23284a;
+  --on-accent: #0d0f1f;
+  --exec: #4fb37a;
+  --exec-soft: #17301f;
+  --improving: #d9a441;
+  --improving-soft: #33280f;
+  --active: #e8664f;
+  --active-soft: #3a1c16;
+  --highlight: rgba(255, 214, 90, 0.22);
+  --hazard: #d9a441;
+  --hazard-ink: #1d1503;
+}
