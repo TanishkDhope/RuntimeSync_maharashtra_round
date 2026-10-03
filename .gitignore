@@ -12,3 +12,4 @@ models/
 .playwright-mcp/
 
 package-lock.json
+CLAUDE.md

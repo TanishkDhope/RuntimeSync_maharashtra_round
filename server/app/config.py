@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     )
 
     # Diagnoser
-    diagnoser: Literal["stub", "model"] = "stub"
-    model_path: str = "../models/relearn-diagnosis/final"
+    diagnoser: Literal["stub", "model", "ollama"] = "stub"
+    model_path: str = "../model/relearn-diagnosis.gguf"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "relearn-diagnosis"
     query_prompt: str = ""
     doc_prompt: str = ""
 

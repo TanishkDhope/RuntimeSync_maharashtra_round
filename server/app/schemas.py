@@ -43,7 +43,7 @@ class TopicOut(BaseModel):
 
 class HealthOut(BaseModel):
     status: Literal["ok"] = "ok"
-    diagnoser: Literal["stub", "model"]
+    diagnoser: Literal["stub", "model", "ollama"] | str
     diagnoser_is_real_model: bool
     model_path: str
     database: str
@@ -112,7 +112,7 @@ class FeedbackStep(BaseModel):
     is_correct: bool
     correct_output: str | None = None
     test_results: list[TestResultOut] | None = None
-    diagnoser: Literal["stub", "model"]
+    diagnoser: Literal["stub", "model", "ollama"] | str
     diagnoser_is_real_model: bool
     diagnosis: list[DiagnosisCandidate] = []
     # True when the top score is below UNKNOWN_THRESHOLD: nothing in the
