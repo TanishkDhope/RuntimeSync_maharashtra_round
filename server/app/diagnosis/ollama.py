@@ -85,6 +85,7 @@ class OllamaDiagnoser:
         self._model_tag = self._resolve_model_tag(model_name, gguf_path)
 
         self._ids = [m.misconception_id for m in library.ranked_misconceptions()]
+        self._row = {mid: i for i, mid in enumerate(self._ids)}
         descriptions = [
             f"{self._doc_prompt}{library.misconception(i).description}"
             for i in self._ids
@@ -205,20 +206,34 @@ class OllamaDiagnoser:
         student_response: str,
         student_explanation: str,
     ) -> list[Candidate]:
+        # Only the beliefs this problem can plausibly produce, not all 50
+        # (Library.candidate_misconceptions explains why this matters).
+        candidates = [
+            mid
+            for mid in self._library.candidate_misconceptions(problem)
+            if mid in self._row
+        ]
+        if not candidates:
+            candidates = list(self._ids)
+        rows = [self._row[mid] for mid in candidates]
+
         query = self._query_prompt + build_query_text(
             problem, student_response, student_explanation
         )
         query_embedding = _normalise_rows(self._embed([query]))[0]
-        similarities = self._doc_embeddings @ query_embedding
+        similarities = self._doc_embeddings[rows] @ query_embedding
         return sorted(
             (
                 Candidate(misconception_id=i, score=float(s))
-                for i, s in zip(self._ids, similarities)
+                for i, s in zip(candidates, similarities)
             ),
             key=lambda c: -c.score,
         )
 
     def add_misconception(self, misconception: 'Misconception') -> None:
+        if misconception.misconception_id in self._row:
+            return
+        self._row[misconception.misconception_id] = len(self._ids)
         self._ids.append(misconception.misconception_id)
         new_desc = f"{self._doc_prompt}{misconception.description}"
         new_embedding = _normalise_rows(self._embed([new_desc]))

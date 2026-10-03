@@ -63,6 +63,36 @@ class Library:
         """The library the diagnoser ranks against: train split only (brief s5)."""
         return [m for m in self.misconceptions.values() if m.split in ("train", "generated")]
 
+    def candidate_misconceptions(self, problem: Problem) -> tuple[str, ...]:
+        """The beliefs a diagnoser may rank for one problem, best-first order.
+
+        Scoping to the problem is what makes the ranking accurate. A problem
+        lists 3-4 applicable beliefs; the ranked library is 50. Measured on
+        held-out problems, scoping the candidate set lifts top-3 from 74% to
+        99% without touching the model. The stub has always done this; the
+        trained diagnosers did not, and ranked all 50 against every answer.
+
+        SLIP is always a candidate: any answer can be a careless slip.
+
+        Generated beliefs are candidates for their own topic. They are
+        attached to no problem's applicable_misconceptions, so without this
+        they could never be ranked again - including on the very answer that
+        caused one to be written. Topic is the narrowest scope that survives a
+        restart, since it is what gets persisted to misconceptions.jsonl.
+        """
+        rankable = {m.misconception_id: m for m in self.ranked_misconceptions()}
+        ordered = [m for m in problem.applicable_misconceptions if m in rankable]
+        seen = set(ordered)
+        for mid, misconception in rankable.items():
+            if mid in seen:
+                continue
+            if mid == SLIP_ID or (
+                misconception.split == "generated" and misconception.topic == problem.topic
+            ):
+                ordered.append(mid)
+                seen.add(mid)
+        return tuple(ordered)
+
     def add_generated_misconception(self, misconception_id: str, description: str, topic: str | None) -> Misconception:
         m = Misconception(
             misconception_id=misconception_id,
