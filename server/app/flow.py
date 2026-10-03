@@ -261,7 +261,7 @@ def _feedback_step(
         correct_output=problem.correct_output,
         test_results=attempt.test_results,
         diagnoser=name,
-        diagnoser_is_real_model=name == "model",
+        diagnoser_is_real_model=name in ("model", "ollama"),
         diagnosis=candidates,
         unknown=bool(scores) and scores[0] < settings.unknown_threshold,
         tied=len(scores) > 1 and scores[0] == scores[1],

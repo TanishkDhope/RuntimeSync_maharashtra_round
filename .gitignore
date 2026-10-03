@@ -10,3 +10,4 @@ models/
 
 # Playwright MCP browser-testing artifacts
 .playwright-mcp/
+CLAUDE.md
