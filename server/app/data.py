@@ -61,7 +61,7 @@ class Library:
 
     def ranked_misconceptions(self) -> list[Misconception]:
         """The library the diagnoser ranks against: train split only (brief s5)."""
-        return [m for m in self.misconceptions.values() if m.split in ("train", "generated")]
+        return [m for m in self.misconceptions.values() if m.split == "train"]
 
     def add_generated_misconception(self, misconception_id: str, description: str, topic: str | None) -> Misconception:
         m = Misconception(
@@ -72,11 +72,6 @@ class Library:
             split="generated",
         )
         self.misconceptions[misconception_id] = m
-        if self.data_dir:
-            jsonl_path = self.data_dir / "misconceptions.jsonl"
-            import json
-            with jsonl_path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(m.__dict__) + "\n")
         return m
 
     def problems_for_topic(self, topic: str | None) -> list[Problem]:

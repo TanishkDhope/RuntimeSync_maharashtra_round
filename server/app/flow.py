@@ -17,18 +17,24 @@ from .checking import check_predict_output
 from .config import Settings
 from .data import Library, Problem
 from .diagnosis.base import Candidate, Diagnoser
-from .models import Attempt, QuizSession
+from .models import Attempt, LearnerMisconception, QuizSession
 from .runner import run_write_code
 from .schemas import (
     AskStep,
+    AttemptTimelineOut,
     DiagnosisCandidate,
     FeedbackStep,
+    LearnerHistoryOut,
+    LearnerMisconceptionOut,
+    LearnerOut,
+    LearnerSummaryOut,
     ProblemOut,
     Progress,
     SummaryAttempt,
     SummaryMisconception,
     SummaryStep,
     TestCaseOut,
+    TopicMasteryOut,
 )
 
 TOP_N = 3
@@ -270,6 +276,15 @@ def submit_answer(
     db.refresh(attempt)
     db.refresh(quiz)
 
+    update_learner_model(
+        db,
+        learner_id=quiz.learner_id,
+        problem=problem,
+        is_correct=is_correct,
+        ranked=ranked,
+        unknown_threshold=settings.unknown_threshold,
+    )
+
     return _feedback_step(library, settings, quiz, attempt)
 
 
@@ -443,3 +458,244 @@ def _latest_attempt(db: Session, quiz: QuizSession) -> Attempt | None:
         .order_by(Attempt.id.desc())
         .limit(1)
     ).first()
+
+
+def update_learner_model(
+    db: Session,
+    learner_id: int,
+    problem: Problem,
+    is_correct: bool,
+    ranked: list[Candidate],
+    unknown_threshold: float = 0.5,
+) -> None:
+    """Updates learner misconceptions and tracks demonstrated understanding across attempts."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    if not is_correct:
+        scores = [c.score for c in ranked]
+        top = ranked[0] if (scores and scores[0] >= unknown_threshold) else None
+        if top and top.misconception_id != "SLIP":
+            m_id = top.misconception_id
+            record = db.exec(
+                select(LearnerMisconception).where(
+                    LearnerMisconception.learner_id == learner_id,
+                    LearnerMisconception.misconception_id == m_id,
+                )
+            ).first()
+
+            if record is None:
+                record = LearnerMisconception(
+                    learner_id=learner_id,
+                    misconception_id=m_id,
+                    status="active",
+                    times_seen=1,
+                    consecutive_correct=0,
+                    first_seen=now,
+                    last_seen=now,
+                )
+                db.add(record)
+            else:
+                record.times_seen += 1
+                record.consecutive_correct = 0
+                record.last_seen = now
+                # Relapse detection: if previously resolved, mark returned = True
+                if record.status == "resolved" or record.returned:
+                    record.returned = True
+                record.status = "active"
+                record.resolved_at = None
+                db.add(record)
+            db.commit()
+    else:
+        # Correct answer: demonstrated understanding!
+        # Check if learner previously held any of the applicable misconceptions for this problem
+        for m_id in problem.applicable_misconceptions:
+            record = db.exec(
+                select(LearnerMisconception).where(
+                    LearnerMisconception.learner_id == learner_id,
+                    LearnerMisconception.misconception_id == m_id,
+                )
+            ).first()
+            if record is not None and record.status in ("active", "improving"):
+                record.consecutive_correct += 1
+                if record.consecutive_correct >= 2:
+                    record.status = "resolved"
+                    record.resolved_at = now
+                else:
+                    record.status = "improving"
+                db.add(record)
+        db.commit()
+
+
+def build_learner_history(
+    db: Session,
+    library: Library,
+    learner_id: int,
+) -> LearnerHistoryOut:
+    """Aggregates misconception status, topic mastery, and attempt history for a learner."""
+    from .models import Learner
+
+    learner = db.get(Learner, learner_id)
+    if learner is None:
+        raise FlowError(f"no learner {learner_id}")
+
+    attempts = list(
+        db.exec(
+            select(Attempt)
+            .where(Attempt.learner_id == learner_id)
+            .order_by(Attempt.created_at.desc())
+        ).all()
+    )
+
+    sessions = list(
+        db.exec(
+            select(QuizSession)
+            .where(QuizSession.learner_id == learner_id)
+        ).all()
+    )
+
+    records = list(
+        db.exec(
+            select(LearnerMisconception)
+            .where(LearnerMisconception.learner_id == learner_id)
+            .order_by(LearnerMisconception.last_seen.desc())
+        ).all()
+    )
+
+    # 1. Summary
+    total_attempts = len(attempts)
+    correct_attempts = sum(1 for a in attempts if a.is_correct)
+    accuracy = (correct_attempts / total_attempts * 100) if total_attempts > 0 else 0.0
+
+    active_count = sum(1 for r in records if r.status == "active")
+    improving_count = sum(1 for r in records if r.status == "improving")
+    resolved_count = sum(1 for r in records if r.status == "resolved")
+    recurring_count = sum(1 for r in records if r.times_seen >= 2)
+
+    summary = LearnerSummaryOut(
+        total_sessions=len(sessions),
+        total_attempts=total_attempts,
+        correct_attempts=correct_attempts,
+        accuracy_percent=round(accuracy, 1),
+        active_count=active_count,
+        improving_count=improving_count,
+        resolved_count=resolved_count,
+        recurring_count=recurring_count,
+    )
+
+    # 2. Misconceptions
+    misconceptions_out: list[LearnerMisconceptionOut] = []
+    for r in records:
+        try:
+            m = library.misconception(r.misconception_id)
+            desc = m.description
+            topic = m.topic
+        except KeyError:
+            desc = f"Misconception {r.misconception_id}"
+            topic = None
+
+        misconceptions_out.append(
+            LearnerMisconceptionOut(
+                misconception_id=r.misconception_id,
+                description=desc,
+                topic=topic,
+                status=r.status,
+                times_seen=r.times_seen,
+                is_recurring=r.times_seen >= 2,
+                returned=bool(r.returned),
+                consecutive_correct=r.consecutive_correct,
+                first_seen=r.first_seen,
+                last_seen=r.last_seen,
+                resolved_at=r.resolved_at,
+            )
+        )
+
+    # 3. Topic Mastery
+    topic_attempts: dict[str, list[Attempt]] = {}
+    for a in attempts:
+        try:
+            prob = library.problem(a.problem_id)
+            t = prob.topic
+        except KeyError:
+            t = "unknown"
+        topic_attempts.setdefault(t, []).append(a)
+
+    topic_mastery: list[TopicMasteryOut] = []
+    for t, atts in topic_attempts.items():
+        if t == "unknown":
+            continue
+        tot = len(atts)
+        cor = sum(1 for a in atts if a.is_correct)
+        acc = (cor / tot * 100) if tot > 0 else 0.0
+        active_in_topic = sum(
+            1 for m in misconceptions_out
+            if m.status == "active" and m.topic == t
+        )
+        topic_mastery.append(
+            TopicMasteryOut(
+                topic=t,
+                total_attempts=tot,
+                correct_attempts=cor,
+                accuracy_percent=round(acc, 1),
+                active_misconceptions_count=active_in_topic,
+            )
+        )
+    topic_mastery.sort(key=lambda tm: tm.topic)
+
+    # 4. Attempt Timeline
+    timeline: list[AttemptTimelineOut] = []
+    for a in attempts:
+        try:
+            prob = library.problem(a.problem_id)
+            topic = prob.topic
+            item_type = prob.item_type
+            problem_text = prob.problem_text
+        except KeyError:
+            topic = "unknown"
+            item_type = "unknown"
+            problem_text = ""
+
+        diag_id = None
+        diag_desc = None
+        if a.diagnosis:
+            top_diag = a.diagnosis[0]
+            diag_id = top_diag.get("misconception_id")
+            if diag_id:
+                try:
+                    diag_desc = library.misconception(diag_id).description
+                except KeyError:
+                    diag_desc = diag_id
+
+        timeline.append(
+            AttemptTimelineOut(
+                id=a.id or 0,
+                session_id=a.session_id,
+                problem_id=a.problem_id,
+                phase=a.phase,
+                topic=topic,
+                item_type=item_type,
+                problem_text=problem_text,
+                student_response=a.student_response,
+                student_explanation=a.student_explanation,
+                is_correct=a.is_correct,
+                top_misconception=diag_id,
+                diagnosed_misconception_id=diag_id,
+                diagnosed_description=diag_desc,
+                created_at=a.created_at,
+            )
+        )
+
+    return LearnerHistoryOut(
+        learner=LearnerOut(
+            id=learner.id or 0,
+            name=learner.name,
+            created_at=learner.created_at,
+        ),
+        summary=summary,
+        beliefs=misconceptions_out,
+        attempts=timeline,
+        misconceptions=misconceptions_out,
+        topic_mastery=topic_mastery,
+        timeline=timeline,
+    )
+

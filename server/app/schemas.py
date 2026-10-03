@@ -34,6 +34,66 @@ class LearnerOut(BaseModel):
     created_at: datetime
 
 
+class LearnerMisconceptionOut(BaseModel):
+    misconception_id: str
+    description: str
+    topic: str | None = None
+    status: Literal["active", "improving", "resolved"] | str
+    times_seen: int
+    is_recurring: bool
+    returned: bool = False
+    consecutive_correct: int
+    first_seen: datetime
+    last_seen: datetime
+    resolved_at: datetime | None = None
+
+
+class TopicMasteryOut(BaseModel):
+    topic: str
+    total_attempts: int
+    correct_attempts: int
+    accuracy_percent: float
+    active_misconceptions_count: int
+
+
+class AttemptTimelineOut(BaseModel):
+    id: int
+    session_id: int
+    problem_id: str
+    phase: str = "initial"
+    topic: str
+    item_type: str
+    problem_text: str
+    student_response: str
+    student_explanation: str
+    is_correct: bool
+    top_misconception: str | None = None
+    diagnosed_misconception_id: str | None = None
+    diagnosed_description: str | None = None
+    created_at: datetime
+
+
+class LearnerSummaryOut(BaseModel):
+    total_sessions: int
+    total_attempts: int
+    correct_attempts: int
+    accuracy_percent: float
+    active_count: int
+    improving_count: int
+    resolved_count: int
+    recurring_count: int
+
+
+class LearnerHistoryOut(BaseModel):
+    learner: LearnerOut
+    summary: LearnerSummaryOut
+    beliefs: list[LearnerMisconceptionOut]
+    attempts: list[AttemptTimelineOut]
+    misconceptions: list[LearnerMisconceptionOut]
+    topic_mastery: list[TopicMasteryOut]
+    timeline: list[AttemptTimelineOut]
+
+
 # --- meta -------------------------------------------------------------------
 
 class TopicOut(BaseModel):
