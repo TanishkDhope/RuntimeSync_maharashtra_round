@@ -5,10 +5,16 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlmodel import delete, select
 
-from .. import flow
+from .. import flow, learner_model
 from ..deps import DbDep, LibraryDep
-from ..models import Attempt, Learner, LearnerMisconception, QuizSession
-from ..schemas import LearnerCreate, LearnerHistoryOut, LearnerOut, OpenSessionOut
+from ..models import Attempt, Learner, LearnerMisconception, MisconceptionEvidence, QuizSession
+from ..schemas import (
+    EvidenceOut,
+    LearnerCreate,
+    LearnerHistoryOut,
+    LearnerOut,
+    OpenSessionOut,
+)
 
 router = APIRouter(prefix="/learners", tags=["learners"])
 
@@ -98,11 +104,39 @@ def delete_learner(learner_id: int, db: DbDep) -> Response:
     if learner is not None:
         # Children first: both tables point at learners.id.
         db.exec(delete(Attempt).where(Attempt.learner_id == learner_id))
+        db.exec(delete(MisconceptionEvidence).where(MisconceptionEvidence.learner_id == learner_id))
         db.exec(delete(LearnerMisconception).where(LearnerMisconception.learner_id == learner_id))
         db.exec(delete(QuizSession).where(QuizSession.learner_id == learner_id))
         db.delete(learner)
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{learner_id}/beliefs/{misconception_id}/evidence",
+    response_model=list[EvidenceOut],
+)
+def belief_evidence(learner_id: int, misconception_id: str, db: DbDep) -> list[EvidenceOut]:
+    """Why this belief stands where it does.
+
+    The standing is derived from these rows, so this is the whole answer, in
+    order. An empty list means the learner has never shown the belief - not
+    that it was cleared.
+    """
+    if db.get(Learner, learner_id) is None:
+        raise HTTPException(status_code=404, detail=f"no learner {learner_id}")
+    return [
+        EvidenceOut(
+            problem_id=row.problem_id,
+            direction=row.direction,
+            phase=row.phase,
+            weight=round(row.weight, 3),
+            session_id=row.session_id,
+            attempt_id=row.attempt_id,
+            created_at=row.created_at,
+        )
+        for row in learner_model.evidence_for(db, learner_id, misconception_id)
+    ]
 
 
 @router.get("/{learner_id}/history", response_model=LearnerHistoryOut)

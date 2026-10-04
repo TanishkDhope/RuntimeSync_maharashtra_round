@@ -7,6 +7,7 @@ export const keys = {
   topics: ["topics"],
   learners: ["learners"],
   history: (learnerId) => ["history", learnerId],
+  evidence: (learnerId, misconceptionId) => ["evidence", learnerId, misconceptionId],
   evaluation: ["evaluation"],
 }
 
@@ -34,6 +35,16 @@ export function useHistory(learnerId) {
     queryFn: () => api.history(learnerId),
     retry,
     enabled: Number.isFinite(learnerId),
+  })
+}
+
+/** The trail behind one belief's status. Only fetched when a row is opened. */
+export function useBeliefEvidence(learnerId, misconceptionId, enabled) {
+  return useQuery({
+    queryKey: keys.evidence(learnerId, misconceptionId),
+    queryFn: () => api.beliefEvidence(learnerId, misconceptionId),
+    retry,
+    enabled: Boolean(enabled) && Number.isFinite(learnerId) && Boolean(misconceptionId),
   })
 }
 

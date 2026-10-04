@@ -1,5 +1,7 @@
-# Dataset build scripts: kept locally, not committed
-scripts/
+# Dataset build scripts: kept locally, not committed. Anchored to the repo
+# root - without the leading slash this also swallowed server/scripts/, which
+# is source (the evaluation and backfill scripts, and check_guardrails.py).
+/scripts/
 
 # Trained models are hundreds of MB. Both spellings: the GGUF lands in model/,
 # train_diagnosis_model.py writes models/relearn-diagnosis/.
@@ -16,7 +18,7 @@ train_model.md
 
 # Local database files, including the one the server creates next to itself
 *.db
-
+*/pdf
 # Playwright MCP browser-testing artifacts
 .playwright-mcp/
 

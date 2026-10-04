@@ -1,6 +1,8 @@
 import { motion } from "motion/react"
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Link, useParams } from "react-router"
+
+import { ChevronRight } from "lucide-react"
 
 import { EmptyState } from "@/components/EmptyState"
 import { StatusChip } from "@/components/StatusChip"
@@ -8,7 +10,7 @@ import { Tag } from "@/components/Tag"
 import { cn } from "@/lib/cn"
 import { timeAgo, topicLabel } from "@/lib/format"
 import { rise, stagger } from "@/lib/motion"
-import { isNotServed, useHistory } from "@/lib/queries"
+import { isNotServed, useBeliefEvidence, useHistory } from "@/lib/queries"
 
 const ORDER = { active: 0, improving: 1, resolved: 2 }
 
@@ -43,7 +45,7 @@ export function HistoryPage() {
   return (
     <PageFrame>
       <Overview learner={learner} beliefs={beliefs} attempts={attempts} />
-      <BeliefLedger beliefs={beliefs} />
+      <BeliefLedger beliefs={beliefs} learnerId={learnerId} />
       <AttemptTimeline attempts={attempts} />
     </PageFrame>
   )
@@ -83,11 +85,14 @@ function Overview({ learner, beliefs, attempts }) {
   )
 }
 
-function BeliefLedger({ beliefs }) {
+function BeliefLedger({ beliefs, learnerId }) {
   const sorted = useMemo(
     () => [...beliefs].sort((a, b) => ORDER[a.status] - ORDER[b.status] || b.times_seen - a.times_seen),
     [beliefs],
   )
+  // Which belief is showing its working. One at a time: the point is to read
+  // the trail, not to compare six of them.
+  const [opened, setOpened] = useState(null)
   return (
     <motion.section variants={rise} initial="hidden" animate="shown" className="overflow-hidden rounded-panel border border-rule bg-surface">
       <div className="flex items-center justify-between border-b border-rule px-6 py-4">
@@ -105,11 +110,20 @@ function BeliefLedger({ beliefs }) {
                 <th className="px-4 py-2.5 font-medium">Status</th>
                 <th className="px-4 py-2.5 font-medium">Seen</th>
                 <th className="px-4 py-2.5 font-medium">Last seen</th>
+                <th className="px-4 py-2.5 font-medium sr-only">Evidence</th>
               </tr>
             </thead>
             <motion.tbody variants={stagger(0.05)} initial="hidden" animate="shown">
               {sorted.map((belief) => (
-                <motion.tr key={belief.misconception_id} variants={rise} className="border-b border-rule align-top last:border-0">
+                <Fragment key={belief.misconception_id}>
+                <motion.tr
+                  variants={rise}
+                  onClick={() => setOpened(opened === belief.misconception_id ? null : belief.misconception_id)}
+                  className={cn(
+                    "cursor-pointer border-b border-rule align-top transition-colors last:border-0",
+                    opened === belief.misconception_id ? "bg-surface-2/60" : "hover:bg-surface-2/40",
+                  )}
+                >
                   <td className="px-6 py-4">
                     <p className="font-serif text-[18px] leading-snug text-ink">“{belief.description}”</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -125,18 +139,101 @@ function BeliefLedger({ beliefs }) {
                     {belief.resolved_at && belief.status === "resolved" && (
                       <p className="mt-1.5 text-[13px] text-muted">resolved {timeAgo(belief.resolved_at)}</p>
                     )}
+                    {belief.status === "improving" && belief.evidence_needed > 0 && (
+                      <EvidenceMeter have={belief.evidence_against} need={belief.evidence_needed} />
+                    )}
                   </td>
                   <td className="px-4 py-4">
                     <SeenDots count={belief.times_seen} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-small text-ink-2">{timeAgo(belief.last_seen)}</td>
+                  <td className="px-4 py-4">
+                    <ChevronRight
+                      aria-hidden="true"
+                      className={cn(
+                        "size-4 text-muted transition-transform",
+                        opened === belief.misconception_id && "rotate-90",
+                      )}
+                    />
+                    <span className="sr-only">
+                      {opened === belief.misconception_id ? "Hide" : "Show"} the evidence behind this belief
+                    </span>
+                  </td>
                 </motion.tr>
+                {opened === belief.misconception_id && (
+                  <tr className="border-b border-rule last:border-0">
+                    <td colSpan={5} className="bg-surface-2/40 px-6 py-4">
+                      <EvidenceTrail learnerId={learnerId} belief={belief} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </motion.tbody>
           </table>
         </div>
       )}
     </motion.section>
+  )
+}
+
+/** How far along a belief is towards being called resolved. */
+function EvidenceMeter({ have, need }) {
+  const pct = Math.min(100, Math.round((have / need) * 100))
+  return (
+    <div className="mt-2 w-28">
+      <div className="h-1 overflow-hidden rounded-full bg-rule">
+        <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-1 text-[13px] text-muted">
+        {have.toFixed(1)} of {need.toFixed(1)} evidence
+      </p>
+    </div>
+  )
+}
+
+/** Why this belief stands where it does: the answers that moved it, in order. */
+function EvidenceTrail({ learnerId, belief }) {
+  const trail = useBeliefEvidence(learnerId, belief.misconception_id, true)
+
+  if (trail.isPending) return <p className="text-small text-muted">Reading the evidence…</p>
+  if (trail.error) {
+    return (
+      <p className="text-small text-muted">
+        {isNotServed(trail.error)
+          ? "This backend doesn't serve the evidence trail yet."
+          : "Couldn't load the evidence behind this belief."}
+      </p>
+    )
+  }
+  if (!trail.data?.length) {
+    return <p className="text-small text-muted">No evidence recorded for this belief yet.</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-small text-muted">
+        Every answer that moved this belief. A wrong answer diagnosed here counts against it being gone;
+        a correct one on a problem that tests it counts towards.
+      </p>
+      <ol className="space-y-1.5">
+        {trail.data.map((row, index) => (
+          <li key={`${row.problem_id}-${index}`} className="flex flex-wrap items-center gap-2 text-small">
+            <Tag
+              className={cn(
+                "h-6 text-[13px]",
+                row.direction === "for" ? "bg-active-soft text-active" : "bg-accent-soft text-accent",
+              )}
+            >
+              {row.direction === "for" ? "showed up" : `cleared +${row.weight.toFixed(2)}`}
+            </Tag>
+            <code className="font-mono text-[13px] text-muted">{row.problem_id}</code>
+            {row.phase === "reassess" && <span className="text-[13px] text-muted">retest</span>}
+            <span className="ml-auto text-[13px] text-muted">{timeAgo(row.created_at)}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   )
 }
 

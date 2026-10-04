@@ -12,6 +12,7 @@ from collections import Counter
 from sqlalchemy import update
 from sqlmodel import Session, select
 
+from . import learner_model
 from .checking import check_predict_output
 from .config import Settings
 from .data import Library, Problem
@@ -356,6 +357,8 @@ def submit_answer(
         is_correct=is_correct,
         ranked=ranked,
         unknown_threshold=settings.unknown_threshold,
+        attempt_id=attempt.id,
+        session_id=quiz.id,
     )
 
     return _feedback_step(library, settings, quiz, attempt)
@@ -625,64 +628,42 @@ def update_learner_model(
     is_correct: bool,
     ranked: list[Candidate],
     unknown_threshold: float = 0.5,
+    *,
+    attempt_id: int | None = None,
+    session_id: int | None = None,
+    phase: str = "initial",
+    targeted_id: str | None = None,
 ) -> None:
-    """Updates learner misconceptions and tracks demonstrated understanding across attempts."""
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    """Record what this answer says about the learner's beliefs.
 
-    if not is_correct:
-        scores = [c.score for c in ranked]
-        top = ranked[0] if (scores and scores[0] >= unknown_threshold) else None
-        if top and top.misconception_id != "SLIP":
-            m_id = top.misconception_id
-            record = db.exec(
-                select(LearnerMisconception).where(
-                    LearnerMisconception.learner_id == learner_id,
-                    LearnerMisconception.misconception_id == m_id,
-                )
-            ).first()
+    Thin on purpose. The rules live in app/learner_model.py, which both this
+    and the verdict path in stages.py go through, so there is one definition
+    of what "resolved" means instead of two that disagreed.
 
-            if record is None:
-                record = LearnerMisconception(
-                    learner_id=learner_id,
-                    misconception_id=m_id,
-                    status="active",
-                    times_seen=1,
-                    consecutive_correct=0,
-                    first_seen=now,
-                    last_seen=now,
-                )
-                db.add(record)
-            else:
-                record.times_seen += 1
-                record.consecutive_correct = 0
-                record.last_seen = now
-                # Relapse detection: if previously resolved, mark returned = True
-                if record.status == "resolved" or record.returned:
-                    record.returned = True
-                record.status = "active"
-                record.resolved_at = None
-                db.add(record)
-            db.commit()
-    else:
-        # Correct answer: demonstrated understanding!
-        # Check if learner previously held any of the applicable misconceptions for this problem
-        for m_id in problem.applicable_misconceptions:
-            record = db.exec(
-                select(LearnerMisconception).where(
-                    LearnerMisconception.learner_id == learner_id,
-                    LearnerMisconception.misconception_id == m_id,
-                )
-            ).first()
-            if record is not None and record.status in ("active", "improving"):
-                record.consecutive_correct += 1
-                if record.consecutive_correct >= 2:
-                    record.status = "resolved"
-                    record.resolved_at = now
-                else:
-                    record.status = "improving"
-                db.add(record)
-        db.commit()
+    A diagnosis below `unknown_threshold` is not evidence of anything: the
+    diagnoser is saying it does not know, and recording a belief on the back
+    of that would manufacture a learner model out of noise.
+
+    `targeted_id` is the belief a retest was aimed at. A correct answer
+    carries no diagnosis, so without it a retest would look like any other
+    right answer and earn only its incidental share of the credit.
+    """
+    diagnosed = targeted_id
+    if not is_correct and ranked and ranked[0].score >= unknown_threshold:
+        diagnosed = ranked[0].misconception_id
+    elif not is_correct:
+        diagnosed = None
+
+    learner_model.observe_answer(
+        db,
+        learner_id=learner_id,
+        problem=problem,
+        is_correct=is_correct,
+        diagnosed_id=diagnosed,
+        phase=phase,
+        attempt_id=attempt_id,
+        session_id=session_id,
+    )
 
 
 def build_learner_history(
@@ -761,7 +742,10 @@ def build_learner_history(
                 times_seen=r.times_seen,
                 is_recurring=r.times_seen >= 2,
                 returned=bool(r.returned),
+                relapses=r.relapses,
                 consecutive_correct=r.consecutive_correct,
+                evidence_against=round(r.evidence_against, 2),
+                evidence_needed=learner_model.RESOLVE_WEIGHT,
                 first_seen=r.first_seen,
                 last_seen=r.last_seen,
                 resolved_at=r.resolved_at,

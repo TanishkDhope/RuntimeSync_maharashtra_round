@@ -343,6 +343,13 @@ export const sampleApi = {
     return learner
   },
 
+  async beliefEvidence() {
+    await wait(120)
+    // The sample data has no evidence rows behind it; an empty trail reads
+    // the same as a belief nobody has shown yet, which is honest here.
+    return []
+  },
+
   async deleteLearner(learnerId) {
     await wait(150)
     const id = Number(learnerId)

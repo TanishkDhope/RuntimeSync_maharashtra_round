@@ -46,6 +46,22 @@ class LearnerOut(BaseModel):
     open_session: OpenSessionOut | None = None
 
 
+class EvidenceOut(BaseModel):
+    """One row of the trail behind a belief's standing.
+
+    What makes "resolved" answerable rather than assertable: the UI can show
+    which answers moved the needle and by how much.
+    """
+
+    problem_id: str
+    direction: Literal["for", "against"] | str
+    phase: str
+    weight: float
+    session_id: int | None = None
+    attempt_id: int | None = None
+    created_at: datetime
+
+
 class LearnerMisconceptionOut(BaseModel):
     misconception_id: str
     description: str
@@ -54,7 +70,13 @@ class LearnerMisconceptionOut(BaseModel):
     times_seen: int
     is_recurring: bool
     returned: bool = False
+    # How many times the belief came back after being called resolved.
+    relapses: int = 0
     consecutive_correct: int
+    # Evidence accumulated against the belief since it was last seen, and what
+    # it takes to clear it. Both reported so "improving" can say how far along.
+    evidence_against: float = 0.0
+    evidence_needed: float = 0.0
     first_seen: datetime
     last_seen: datetime
     resolved_at: datetime | None = None

@@ -11,6 +11,7 @@ from .checking import check_predict_output, normalise_output
 from .config import Settings
 from .data import Library, Problem
 from .diagnosis.base import Diagnoser
+from . import learner_model
 from .models import Attempt, LearnerMisconception, QuizSession
 from .schemas import (
     ExplanationOut,
@@ -539,67 +540,72 @@ def build_result_step(db, library, settings, quiz, initial):
         for a in retest_attempts
     )
 
+    # What the retest showed. These are the evidence on screen; the verdict
+    # itself is derived below, from this retest plus everything before it.
     if total == 0:
-        verdict = "improving"
         reasons = [
             VerdictReason(text="No retest questions were available.", ok=False),
             VerdictReason(text="Explanation was shown.", ok=True),
         ]
     elif correct == total and not still_in_reasoning:
-        verdict = "resolved"
         reasons = [
             VerdictReason(text=f"All {total} retest questions answered correctly.", ok=True),
             VerdictReason(text="Reasoning no longer matches the diagnosed misconception.", ok=True),
         ]
     elif correct > 0 or not still_in_reasoning:
-        verdict = "improving"
         reasons = [
             VerdictReason(text=f"{correct} of {total} retest questions correct.", ok=correct > 0),
             VerdictReason(text="Some evidence of improvement.", ok=True),
         ]
     else:
-        verdict = "active"
         reasons = [
             VerdictReason(text=f"Only {correct} of {total} retest questions correct.", ok=False),
             VerdictReason(text="Misconception still appears in answers and reasoning.", ok=False),
         ]
 
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
-    record = db.exec(
+    # The retest answers are the strongest evidence this system ever gathers:
+    # the problems were picked because they test the diagnosed belief. They
+    # used to be thrown away - stages.py never called the learner model, and
+    # instead wrote a status over the top of it. Now they go in as evidence
+    # like everything else, and the verdict is what the evidence says.
+    existing = db.exec(
         select(LearnerMisconception).where(
             LearnerMisconception.learner_id == quiz.learner_id,
             LearnerMisconception.misconception_id == confirmed_id,
         )
     ).first()
-    old_status = record.status if record else None
-    if record is None:
-        record = LearnerMisconception(
+    old_status = existing.status if existing else None
+
+    for ra in retest_attempts:
+        try:
+            rt_problem = library.problem(ra.problem_id)
+        except KeyError:
+            continue
+        learner_model.observe_answer(
+            db,
             learner_id=quiz.learner_id,
-            misconception_id=confirmed_id,
-            status=verdict,
-            times_seen=1,
-            consecutive_correct=correct,
-            first_seen=now,
-            last_seen=now,
+            problem=rt_problem,
+            is_correct=ra.is_correct,
+            diagnosed_id=confirmed_id,
+            phase="reassess",
+            attempt_id=ra.id,
+            session_id=quiz.id,
         )
-        db.add(record)
-    else:
-        record.last_seen = now
-        if verdict == "resolved":
-            record.status = "resolved"
-            record.resolved_at = now
-            record.consecutive_correct = correct
-        elif verdict == "improving":
-            record.status = "improving"
-            record.consecutive_correct = correct
-        else:
-            if record.status == "resolved":
-                record.returned = True
-            record.status = "active"
-            record.consecutive_correct = 0
-        db.add(record)
-    db.commit()
+
+    standing = learner_model.recompute(db, quiz.learner_id, confirmed_id)
+    # The reasons above describe the retest; the verdict itself comes from the
+    # whole evidence trail, so a belief cleared here cannot contradict what
+    # the learner's history already shows.
+    verdict = standing.status
+    if verdict != "resolved":
+        shortfall = learner_model.RESOLVE_WEIGHT - standing.evidence_against
+        reasons.append(
+            VerdictReason(
+                text=f"Needs {shortfall:.1f} more points of evidence across "
+                f"{learner_model.RESOLVE_PROBLEMS} different problems to count as resolved.",
+                ok=False,
+            )
+        )
 
     return ResultStep(
         session_id=quiz.id,
