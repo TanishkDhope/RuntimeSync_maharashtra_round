@@ -156,7 +156,16 @@ def generate_explanation(
         "2. Shows why their reasoning was incorrect using the original problem.\n"
         "3. Gives a short corrected example or trace that demonstrates correct Python behavior.\n"
         "4. Is encouraging and clear — written directly to the student.\n\n"
-        "Write only the explanation text. No headers, no bullet points. Use paragraph breaks (blank lines) between paragraphs."
+        "Formatting rules (follow exactly):\n"
+        "- Separate paragraphs with a blank line.\n"
+        "- Wrap Python variable names, values, operators, and keywords in backticks: `x`, `True`, `==`.\n"
+        "- Use **bold** to emphasise the key conceptual point once per explanation.\n"
+        "- If you show a short Python snippet (2-8 lines), wrap it in a fenced code block:\n"
+        "  ```python\n"
+        "  # code here\n"
+        "  ```\n"
+        "- Do NOT use headers (#), bullet lists (-), or numbered lists.\n"
+        "- Write only the explanation. No preamble, no sign-off.\n"
     )
     result = _groq_chat(settings, [{"role": "user", "content": prompt}], temperature=0.5)
     if result:
@@ -166,6 +175,7 @@ def generate_explanation(
         "Python does not work this way. Review how Python executes this kind of code step by step, "
         "paying attention to the order of operations and what each statement actually does."
     )
+
 
 
 # --- retest problem generation ----------------------------------------------

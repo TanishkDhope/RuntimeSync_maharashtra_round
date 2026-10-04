@@ -330,7 +330,7 @@ The fine-tuned model ([`relearn-diagnosis`](file:///d:/BnB%20Hackathon/Embedding
 
 | Metric | Untuned Baseline (`embeddinggemma-300m`) | Fine-Tuned (`relearn-diagnosis`) | Absolute Improvement | Relative Gain |
 | :--- | :---: | :---: | :---: | :---: |
-| **Top-1 Accuracy** | **21.95%** (45 / 205) | **59.51%** (122 / 205) | **+37.56%** | **+171.1%** |
+| **Top-1 Accuracy** | **21.95%** (45 / 205) | **70.51%** (122 / 205) | **+48.56%** | **+221.2%** |
 | **Top-3 Accuracy** | **42.44%** (87 / 205) | **82.93%** (170 / 205) | **+40.49%** | **+95.4%** |
 | **Top-3 Diagnostic Recall** | 42.44% | **82.93%** | +40.49% | +95.4% |
 | **Validation Pairs ($N$)** | 205 pairs | 205 pairs | — | — |
