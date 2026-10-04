@@ -127,7 +127,7 @@ function DiagnoserStatus({ health }) {
     >
       <span className="size-2 rounded-full bg-accent" aria-hidden="true" />
       Trained model
-      <span className="hidden font-normal text-accent/75 lg:inline">· {data.library_size} beliefs</span>
+      {/* <span className="hidden font-normal text-accent/75 lg:inline">· {data.library_size} beliefs</span> */}
     </span>
   ) : (
     <span className="inline-flex h-8 items-center gap-2 rounded-full border border-hazard/60 bg-hazard/25 px-3 text-small font-semibold text-hazard-ink dark:text-hazard">
