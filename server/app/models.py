@@ -72,3 +72,23 @@ class Attempt(SQLModel, table=True):
     # eye; only the injection score acts on anything today.
     reason_guardrail: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=_now)
+
+
+class LearnerMisconception(SQLModel, table=True):
+    __tablename__ = "learner_misconceptions"
+    __table_args__ = (
+        UniqueConstraint("learner_id", "misconception_id", name="uq_learner_misconception"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    learner_id: int = Field(foreign_key="learners.id", index=True)
+    misconception_id: str = Field(index=True, max_length=60)
+    # active | improving | resolved
+    status: str = Field(default="active", max_length=20)
+    times_seen: int = Field(default=1)
+    consecutive_correct: int = Field(default=0)
+    returned: bool = Field(default=False)
+    first_seen: datetime = Field(default_factory=_now)
+    last_seen: datetime = Field(default_factory=_now)
+    resolved_at: datetime | None = Field(default=None)
+

@@ -75,6 +75,8 @@ def settings(tmp_path) -> Settings:
         run_timeout_seconds=3.0,
         serve_write_code=True,
         llm_api_key="",
+        llm_model="",
+        llm_provider="",
         guardrail_model="",
     )
 
