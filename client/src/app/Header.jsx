@@ -29,9 +29,6 @@ export function Header({ health }) {
           >
             History
           </NavItem>
-          <NavItem to="/evaluation" active={pathname.startsWith("/evaluation")}>
-            Evaluation
-          </NavItem>
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <DiagnoserStatus health={health} />
