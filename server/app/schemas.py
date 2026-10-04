@@ -118,6 +118,38 @@ class LearnerSummaryOut(BaseModel):
     recurring_count: int
 
 
+class GraphNodeOut(BaseModel):
+    """A topic hub or one belief in the learner's neighbourhood."""
+
+    id: str
+    kind: Literal["topic", "belief"]
+    label: str
+    description: str | None = None
+    topic: str | None = None
+    # None on topic hubs and on beliefs the learner has never shown.
+    status: str | None = None
+    times_seen: int = 0
+    # False when the node is only present because it neighbours one the
+    # learner has actually shown - drawn faint, not claimed.
+    held: bool = False
+
+
+class GraphEdgeOut(BaseModel):
+    source: str
+    target: str
+    # confusable -> produces similar wrong answers (the diagnoser must split
+    # these). co_occurs -> several problems test both. in_topic -> membership.
+    kind: Literal["confusable", "co_occurs", "in_topic"]
+    weight: float = 1.0
+
+
+class BeliefGraphOut(BaseModel):
+    nodes: list[GraphNodeOut]
+    edges: list[GraphEdgeOut]
+    #: Beliefs in the library outside this view, so the UI can say so.
+    hidden_beliefs: int = 0
+
+
 class LearnerHistoryOut(BaseModel):
     learner: LearnerOut
     summary: LearnerSummaryOut

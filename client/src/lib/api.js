@@ -59,6 +59,7 @@ const httpApi = {
   learners: () => request("/learners"),
   createLearner: (name) => request("/learners", { method: "POST", body: { name } }),
   deleteLearner: (learnerId) => request(`/learners/${learnerId}`, { method: "DELETE" }),
+  beliefGraph: (learnerId) => request(`/learners/${learnerId}/graph`),
   beliefEvidence: (learnerId, misconceptionId) =>
     request(`/learners/${learnerId}/beliefs/${encodeURIComponent(misconceptionId)}/evidence`),
   startSession: (learnerId, topic) =>

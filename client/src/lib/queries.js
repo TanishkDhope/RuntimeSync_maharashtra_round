@@ -8,6 +8,7 @@ export const keys = {
   learners: ["learners"],
   history: (learnerId) => ["history", learnerId],
   evidence: (learnerId, misconceptionId) => ["evidence", learnerId, misconceptionId],
+  graph: (learnerId) => ["graph", learnerId],
   evaluation: ["evaluation"],
 }
 
@@ -33,6 +34,16 @@ export function useHistory(learnerId) {
   return useQuery({
     queryKey: keys.history(learnerId),
     queryFn: () => api.history(learnerId),
+    retry,
+    enabled: Number.isFinite(learnerId),
+  })
+}
+
+/** The learner's beliefs and the ones adjacent to them. */
+export function useBeliefGraph(learnerId) {
+  return useQuery({
+    queryKey: keys.graph(learnerId),
+    queryFn: () => api.beliefGraph(learnerId),
     retry,
     enabled: Number.isFinite(learnerId),
   })

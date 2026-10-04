@@ -343,6 +343,13 @@ export const sampleApi = {
     return learner
   },
 
+  async beliefGraph() {
+    await wait(120)
+    // No belief graph in the sample data: the edges come from the dataset the
+    // server loads, which the mock does not have.
+    return { nodes: [], edges: [], hidden_beliefs: 0 }
+  },
+
   async beliefEvidence() {
     await wait(120)
     // The sample data has no evidence rows behind it; an empty trail reads

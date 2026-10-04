@@ -5,10 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlmodel import delete, select
 
-from .. import flow, learner_model
+from .. import flow, graph, learner_model
 from ..deps import DbDep, LibraryDep
 from ..models import Attempt, Learner, LearnerMisconception, MisconceptionEvidence, QuizSession
 from ..schemas import (
+    BeliefGraphOut,
     EvidenceOut,
     LearnerCreate,
     LearnerHistoryOut,
@@ -137,6 +138,19 @@ def belief_evidence(learner_id: int, misconception_id: str, db: DbDep) -> list[E
         )
         for row in learner_model.evidence_for(db, learner_id, misconception_id)
     ]
+
+
+@router.get("/{learner_id}/graph", response_model=BeliefGraphOut)
+def belief_graph(learner_id: int, db: DbDep, library: LibraryDep) -> BeliefGraphOut:
+    """The learner's beliefs and what sits next to them.
+
+    Their own neighbourhood, not the whole library: beliefs they have shown
+    plus one hop. Empty nodes mean nothing has been diagnosed yet, which is a
+    fine state, not an error.
+    """
+    if db.get(Learner, learner_id) is None:
+        raise HTTPException(status_code=404, detail=f"no learner {learner_id}")
+    return graph.build_belief_graph(db, library, learner_id)
 
 
 @router.get("/{learner_id}/history", response_model=LearnerHistoryOut)

@@ -5,6 +5,8 @@ import { Link, useParams } from "react-router"
 import { ChevronRight } from "lucide-react"
 
 import { EmptyState } from "@/components/EmptyState"
+import { BeliefGraph } from "./BeliefGraph"
+import { TopicMastery } from "./TopicMastery"
 import { StatusChip } from "@/components/StatusChip"
 import { Tag } from "@/components/Tag"
 import { cn } from "@/lib/cn"
@@ -41,10 +43,12 @@ export function HistoryPage() {
     )
   }
 
-  const { learner, beliefs, attempts } = history.data
+  const { learner, beliefs, attempts, topic_mastery: topicMastery } = history.data
   return (
     <PageFrame>
       <Overview learner={learner} beliefs={beliefs} attempts={attempts} />
+      <TopicMastery topics={topicMastery} />
+      <BeliefGraph learnerId={learnerId} />
       <BeliefLedger beliefs={beliefs} learnerId={learnerId} />
       <AttemptTimeline attempts={attempts} />
     </PageFrame>
