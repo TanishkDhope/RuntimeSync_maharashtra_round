@@ -1,6 +1,6 @@
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
-import { useParams } from "react-router"
+import { Link, useParams } from "react-router"
 
 import { EmptyState } from "@/components/EmptyState"
 import { StatusChip } from "@/components/StatusChip"
@@ -184,7 +184,13 @@ function AttemptTimeline({ attempts }) {
         <div className="space-y-1 px-6 py-5">
           {sessions.map(([sessionId, rows]) => (
             <div key={sessionId} className="flex items-center gap-5 py-1.5">
-              <span className="w-24 shrink-0 font-mono text-[13px] tabular text-muted">Session {sessionId}</span>
+              <Link
+                to={`/learn/${sessionId}`}
+                title="Open this session's summary"
+                className="w-24 shrink-0 font-mono text-[13px] tabular text-muted underline-offset-4 hover:text-ink hover:underline"
+              >
+                Session {sessionId}
+              </Link>
               <div className="relative flex flex-1 flex-wrap items-center gap-2.5">
                 <span aria-hidden="true" className="absolute inset-x-0 top-1/2 h-px bg-rule" />
                 {rows.map((attempt) => (

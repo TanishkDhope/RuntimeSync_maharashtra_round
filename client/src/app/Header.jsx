@@ -3,37 +3,61 @@ import { motion } from "motion/react"
 import { Link, useLocation } from "react-router"
 
 import { cn } from "@/lib/cn"
-import { initials, useCurrentLearner } from "@/lib/learner"
+import { initials, setCurrentLearner, useCurrentLearner } from "@/lib/learner"
 import { spring } from "@/lib/motion"
-import { readJson } from "@/lib/storage"
+import { clearCurrentSession, useCurrentSession } from "@/lib/session"
 import { useTheme } from "@/lib/theme"
 
 export function Header({ health }) {
   const learner = useCurrentLearner()
   const { pathname } = useLocation()
-  const lastSession = readJson("local", "relearn.session")
-  const learnTo = lastSession?.learnerId === learner?.id && lastSession?.id ? `/learn/${lastSession.id}` : "/"
+  const session = useCurrentSession()
+  // An open session belonging to whoever this browser is working as.
+  const open = session?.id && session.learnerId === learner?.id ? session : null
+  // History and the profile button are earned: there is nothing behind them
+  // until a session has been started. The learner is set at that moment and
+  // stays set, so finishing a session doesn't take them away again.
+  const started = Boolean(learner)
+
+  /**
+   * Going home signs out. Nothing is destroyed: the session stays open on the
+   * backend, so picking the same name again offers to continue it. This only
+   * forgets who this browser is working as, which is what takes History and
+   * the profile button back off the bar.
+   */
+  function signOut() {
+    setCurrentLearner(null)
+    clearCurrentSession()
+  }
 
   return (
     <header className="sticky top-0 z-30 border-b border-rule bg-paper/90 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-[1240px] items-center gap-6 px-6 lg:px-10">
-        <Wordmark />
+        <Wordmark onClick={signOut} signsOut={started} />
         <nav aria-label="Main" className="flex items-center gap-1">
-          <NavItem to={learnTo} active={pathname === "/" || pathname.startsWith("/learn/")}>
-            Learn
-          </NavItem>
           <NavItem
-            to={learner ? `/learners/${learner.id}` : "/"}
-            active={pathname.startsWith("/learners")}
-            title={learner ? undefined : "Pick a learner first"}
+            to={open ? `/learn/${open.id}` : "/"}
+            active={pathname === "/" || pathname.startsWith("/learn/")}
+            title={open ? "Your session is still open" : undefined}
           >
-            History
+            {open ? "Session" : "Learn"}
+            {open && (
+              <span
+                aria-hidden="true"
+                className="ml-1.5 inline-block size-1.5 translate-y-[-1px] rounded-full bg-accent align-middle"
+              />
+            )}
           </NavItem>
+          {started && (
+            <NavItem to={`/learners/${learner.id}`} active={pathname.startsWith("/learners")}>
+              History
+            </NavItem>
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <DiagnoserStatus health={health} />
           <ThemeToggle />
-          {learner && (
+          {started && (
             <Link
               to={`/learners/${learner.id}`}
               title={`${learner.name}: learner history`}
@@ -48,9 +72,15 @@ export function Header({ health }) {
   )
 }
 
-function Wordmark() {
+function Wordmark({ onClick, signsOut }) {
   return (
-    <Link to="/" className="font-serif text-[23px] font-semibold tracking-tight text-ink" aria-label="Re:Learn, home">
+    <Link
+      to="/"
+      onClick={onClick}
+      title={signsOut ? "Home - this signs you out of the session" : undefined}
+      className="font-serif text-[23px] font-semibold tracking-tight text-ink"
+      aria-label={signsOut ? "Re:Learn, home and sign out" : "Re:Learn, home"}
+    >
       Re<span className="text-accent">:</span>Learn
     </Link>
   )

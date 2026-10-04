@@ -49,6 +49,174 @@ def test_blank_name_is_rejected(client):
     assert client.post("/learners", json={"name": "   "}).status_code == 422
 
 
+def test_deleting_a_learner_takes_everything_with_them(client):
+    learner = _learner(client, "Ritchie")
+    step = _session(client, learner["id"])
+    client.post(
+        f"/sessions/{step['session_id']}/answer",
+        json={"student_response": "wrong", "student_explanation": "guess"},
+    )
+
+    assert client.delete(f"/learners/{learner['id']}").status_code == 204
+    assert client.get(f"/learners/{learner['id']}").status_code == 404
+    assert client.get("/learners").json() == []
+    # The session and its history go too - this is the destructive one.
+    assert client.get(f"/sessions/{step['session_id']}").status_code == 404
+    assert client.get(f"/learners/{learner['id']}/history").status_code == 404
+
+
+def test_deleting_a_learner_leaves_the_others_alone(client):
+    doomed = _learner(client, "Thompson")
+    kept = _learner(client, "Kernighan")
+    kept_session = _session(client, kept["id"])
+    _session(client, doomed["id"])
+
+    assert client.delete(f"/learners/{doomed['id']}").status_code == 204
+    names = [row["name"] for row in client.get("/learners").json()]
+    assert names == ["Kernighan"]
+    assert client.get(f"/sessions/{kept_session['session_id']}").json()["step"] == "ask"
+    assert client.get("/learners").json()[0]["open_session"]["id"] == kept_session["session_id"]
+
+
+def test_deleting_a_learner_twice_is_not_an_error(client):
+    learner = _learner(client, "Stroustrup")
+    assert client.delete(f"/learners/{learner['id']}").status_code == 204
+    assert client.delete(f"/learners/{learner['id']}").status_code == 204
+    assert client.delete("/learners/999999").status_code == 204
+
+
+def test_the_name_is_free_again_after_deleting_a_learner(client):
+    """Re-registering a deleted name gives a clean slate, not the old records.
+
+    The id may well be reused - SQLite hands back the lowest free rowid - so
+    what matters is that nothing from the first learner came back with it.
+    """
+    first = _learner(client, "Liskov")
+    session = _session(client, first["id"])
+    client.post(
+        f"/sessions/{session['session_id']}/answer",
+        json={"student_response": "wrong", "student_explanation": "guess"},
+    )
+    client.delete(f"/learners/{first['id']}")
+
+    second = _learner(client, "Liskov")
+    assert second["open_session"] is None
+    history = client.get(f"/learners/{second['id']}/history").json()
+    assert history["attempts"] == []
+    assert history["summary"]["total_sessions"] == 0
+
+
+def test_a_learner_with_no_session_has_no_open_session(client):
+    learner = _learner(client, "Hopper")
+    assert learner["open_session"] is None
+    assert client.get("/learners").json()[0]["open_session"] is None
+
+
+def test_an_unfinished_session_is_reported_as_open(client):
+    learner = _learner(client, "Lovelace")
+    step = _session(client, learner["id"])
+
+    row = client.get("/learners").json()[0]
+    assert row["open_session"]["id"] == step["session_id"]
+    assert row["open_session"]["topic"] == "variables"
+    assert row["open_session"]["state"] == "asking"
+    # Typing the same name again has to surface it too: that is what turns the
+    # start form into a "continue" form.
+    assert _learner(client, "Lovelace")["open_session"]["id"] == step["session_id"]
+
+
+def test_a_finished_session_is_no_longer_open(client):
+    learner = _learner(client, "Turing")
+    step = _session(client, learner["id"])
+    session_id = step["session_id"]
+    while step["step"] != "summary":
+        if step["step"] == "ask":
+            step = client.post(
+                f"/sessions/{session_id}/answer",
+                json={"student_response": "wrong", "student_explanation": "guess"},
+            ).json()
+        else:
+            step = client.post(f"/sessions/{session_id}/next").json()
+
+    assert client.get("/learners").json()[0]["open_session"] is None
+    assert client.get(f"/learners/{learner['id']}").json()["open_session"] is None
+
+
+def test_the_newest_open_session_is_the_one_reported(client):
+    learner = _learner(client, "Knuth")
+    first = _session(client, learner["id"])
+    second = _session(client, learner["id"], topic="loops")
+    assert second["session_id"] != first["session_id"]
+    assert client.get("/learners").json()[0]["open_session"]["id"] == second["session_id"]
+
+
+def test_closing_a_session_ends_it_but_keeps_what_it_recorded(client):
+    learner = _learner(client, "Dijkstra")
+    step = _session(client, learner["id"])
+    session_id = step["session_id"]
+    client.post(
+        f"/sessions/{session_id}/answer",
+        json={"student_response": "wrong", "student_explanation": "guess"},
+    )
+
+    closed = client.post(f"/sessions/{session_id}/close")
+    assert closed.status_code == 200
+    assert closed.json()["step"] == "summary"
+
+    # It stops being open, so the learner is free to start a fresh one...
+    assert client.get("/learners").json()[0]["open_session"] is None
+    # ...but it is still there, still readable, and still in the history.
+    assert client.get(f"/sessions/{session_id}").json()["step"] == "summary"
+    history = client.get(f"/learners/{learner['id']}/history").json()
+    assert len(history["attempts"]) == 1
+    assert history["attempts"][0]["session_id"] == session_id
+    assert history["summary"]["total_sessions"] == 1
+
+
+def test_a_new_session_after_closing_adds_to_the_same_history(client):
+    learner = _learner(client, "Hamilton")
+    first = _session(client, learner["id"])
+    client.post(
+        f"/sessions/{first['session_id']}/answer",
+        json={"student_response": "wrong", "student_explanation": "guess"},
+    )
+    client.post(f"/sessions/{first['session_id']}/close")
+
+    second = _session(client, learner["id"], topic="loops")
+    client.post(
+        f"/sessions/{second['session_id']}/answer",
+        json={"student_response": "also wrong", "student_explanation": "another guess"},
+    )
+
+    assert client.get("/learners").json()[0]["open_session"]["id"] == second["session_id"]
+    history = client.get(f"/learners/{learner['id']}/history").json()
+    assert history["summary"]["total_sessions"] == 2
+    assert history["summary"]["total_attempts"] == 2
+    # Both sessions are represented, the closed one included.
+    assert {a["session_id"] for a in history["attempts"]} == {
+        first["session_id"],
+        second["session_id"],
+    }
+
+
+def test_closing_a_session_leaves_the_other_one_alone(client):
+    learner = _learner(client, "Wirth")
+    ended = _session(client, learner["id"])
+    kept = _session(client, learner["id"], topic="loops")
+
+    assert client.post(f"/sessions/{ended['session_id']}/close").status_code == 200
+    assert client.get(f"/sessions/{kept['session_id']}").json()["step"] == "ask"
+    assert client.get("/learners").json()[0]["open_session"]["id"] == kept["session_id"]
+
+
+def test_closing_a_session_twice_is_not_an_error(client):
+    learner = _learner(client, "Backus")
+    step = _session(client, learner["id"])
+    assert client.post(f"/sessions/{step['session_id']}/close").status_code == 200
+    assert client.post(f"/sessions/{step['session_id']}/close").json()["step"] == "summary"
+    assert client.post("/sessions/999999/close").status_code == 404
+
+
 # --- the quiz loop ----------------------------------------------------------
 
 def test_session_starts_on_the_ask_step(client):

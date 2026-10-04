@@ -55,6 +55,19 @@ def read_session(session_id: int, db: DbDep, library: LibraryDep, settings: Sett
     return flow.current_step(db, library, settings, _load(db, session_id))
 
 
+@router.post("/{session_id}/close", response_model=Step)
+def close_session(session_id: int, db: DbDep, library: LibraryDep, settings: SettingsDep):
+    """End a session early and hand back the summary it froze on.
+
+    Nothing is destroyed: the attempts stay, history keeps showing them, and
+    the session itself stays readable at its summary. Closing one that has
+    already finished just returns that summary again.
+    """
+    quiz = _load(db, session_id)
+    flow.close_session(db, quiz)
+    return flow.current_step(db, library, settings, quiz)
+
+
 @router.post("/{session_id}/answer", response_model=Step)
 def answer(
     session_id: int,

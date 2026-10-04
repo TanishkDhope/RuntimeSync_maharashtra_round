@@ -11,6 +11,9 @@ const VARIANTS = {
   secondary:
     "border border-rule-strong bg-surface text-ink hover:border-ink-2/60 hover:bg-surface-2 disabled:text-muted",
   ghost: "text-ink-2 hover:bg-surface-2 hover:text-ink disabled:text-muted",
+  // --paper is the page ground, light where --active is dark and dark where it
+  // is light, so this reads correctly in both themes without a new token.
+  danger: "bg-active text-paper hover:brightness-110 disabled:bg-rule-strong disabled:text-muted",
 }
 
 const SIZES = {

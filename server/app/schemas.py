@@ -28,10 +28,22 @@ class LearnerCreate(BaseModel):
         return stripped
 
 
+class OpenSessionOut(BaseModel):
+    """A session this learner has not finished, so the UI can offer to resume it
+    instead of silently opening a second one."""
+
+    id: int
+    topic: str
+    state: str
+    started_at: datetime
+
+
 class LearnerOut(BaseModel):
     id: int
     name: str
     created_at: datetime
+    # None when every session this learner started has run to its verdict.
+    open_session: OpenSessionOut | None = None
 
 
 class LearnerMisconceptionOut(BaseModel):

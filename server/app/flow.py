@@ -409,6 +409,27 @@ def advance(db: Session, library: Library, settings: Settings, quiz: QuizSession
     return current_step(db, library, settings, quiz)
 
 
+def close_session(db: Session, quiz: QuizSession) -> None:
+    """End a session early, keeping everything it recorded.
+
+    Marking it done is the whole operation. The attempts stay, and so does what
+    the learner model took from them: history is built from those rows, not
+    from the session's state, so a closed session still shows up in the ledger
+    and still opens on its own summary. It just stops counting as open, which
+    frees the learner to start a fresh one.
+    """
+    quiz.state = "done"
+    # Transient per-question fields; leaving them set would describe a probe or
+    # retest that is no longer running.
+    quiz.probe_problem_id = None
+    quiz.confirmed_misconception_id = None
+    quiz.retest_cursor = 0
+    quiz.retest_total = 0
+    db.add(quiz)
+    db.commit()
+    db.refresh(quiz)
+
+
 def _advance_to_next(db: Session, library: Library, settings: Settings, quiz: QuizSession):
     """Move the cursor to the next problem (or to done)."""
     quiz.cursor += 1

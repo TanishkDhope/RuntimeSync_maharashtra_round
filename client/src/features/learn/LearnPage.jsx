@@ -1,8 +1,11 @@
-import { useMemo } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { useEffect, useMemo } from "react"
 import { Link, useParams } from "react-router"
 
 import { EmptyState } from "@/components/EmptyState"
 import { useCurrentLearner } from "@/lib/learner"
+import { keys } from "@/lib/queries"
+import { clearCurrentSession, setCurrentSession } from "@/lib/session"
 
 import { buildCases } from "./caseModel"
 import { CaseRail } from "./CaseRail"
@@ -19,8 +22,21 @@ export function LearnPage() {
 function LearnSession({ sessionId }) {
   const thread = useThread(sessionId)
   const learner = useCurrentLearner()
+  const queryClient = useQueryClient()
   const { cases, summary } = useMemo(() => buildCases(thread.steps), [thread.steps])
   const progress = useMemo(() => thread.steps.findLast((s) => s.progress)?.progress ?? null, [thread.steps])
+
+  // This session is the open one while it runs, and stops being open the moment
+  // it reaches its summary. Opening a session by its URL counts as opening it.
+  useEffect(() => {
+    if (!learner) return
+    if (summary) {
+      clearCurrentSession(sessionId)
+      queryClient.invalidateQueries({ queryKey: keys.learners })
+    } else if (!thread.loading && !thread.loadError) {
+      setCurrentSession({ id: sessionId, learnerId: learner.id })
+    }
+  }, [summary, sessionId, learner, thread.loading, thread.loadError, queryClient])
 
   if (thread.loading) return <LearnSkeleton />
   if (thread.loadError) {

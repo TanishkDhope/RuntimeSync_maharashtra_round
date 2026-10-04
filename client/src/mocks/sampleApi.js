@@ -343,6 +343,19 @@ export const sampleApi = {
     return learner
   },
 
+  async deleteLearner(learnerId) {
+    await wait(150)
+    const id = Number(learnerId)
+    state.learners = state.learners.filter((l) => l.id !== id)
+    state.attempts = state.attempts.filter((a) => a.learner_id !== id)
+    for (const [key, s] of Object.entries(state.sessions)) {
+      if (s.learnerId === id) delete state.sessions[key]
+    }
+    delete state.beliefs[id]
+    save()
+    return null
+  },
+
   async startSession(learnerId, topic) {
     await wait(250)
     const s = { id: id(), learnerId, topic, caseIndex: 0, phase: "ask", ctx: {} }
@@ -353,6 +366,14 @@ export const sampleApi = {
   async readSession(sessionId) {
     await wait(120)
     return sessionOr404(sessionId).last
+  },
+
+  async closeSession(sessionId) {
+    await wait(150)
+    // Same as running out of cases: the session freezes on its summary and the
+    // attempts behind it stay where they are.
+    const s = sessionOr404(sessionId)
+    return finish(s, summary(s))
   },
 
   async answer(sessionId, response, reason) {

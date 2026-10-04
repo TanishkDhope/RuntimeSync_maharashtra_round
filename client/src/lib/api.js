@@ -58,9 +58,11 @@ const httpApi = {
   topics: () => request("/topics"),
   learners: () => request("/learners"),
   createLearner: (name) => request("/learners", { method: "POST", body: { name } }),
+  deleteLearner: (learnerId) => request(`/learners/${learnerId}`, { method: "DELETE" }),
   startSession: (learnerId, topic) =>
     request("/sessions", { method: "POST", body: { learner_id: learnerId, topic } }),
   readSession: (sessionId) => request(`/sessions/${sessionId}`),
+  closeSession: (sessionId) => request(`/sessions/${sessionId}/close`, { method: "POST" }),
   answer: (sessionId, response, reason) =>
     request(`/sessions/${sessionId}/answer`, {
       method: "POST",
