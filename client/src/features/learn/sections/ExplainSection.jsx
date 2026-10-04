@@ -39,7 +39,7 @@ export function ExplainSection({ c, folded }) {
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="eyebrow">Explanation</span>
-          {generated ? <ProvenanceTag kind="llm" label="Generated · Gemini" /> : <ProvenanceTag kind="authored" />}
+          {generated ? <ProvenanceTag kind="llm" label="LLM · Generated" /> : <ProvenanceTag kind="authored" />}
         </div>
         <div className="max-w-[64ch] space-y-3 font-serif text-[19px] leading-[1.6] text-ink">
           {explanation.text.split(/\n{2,}/).map((paragraph, i) => (
