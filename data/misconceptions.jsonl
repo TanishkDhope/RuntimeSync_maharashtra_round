@@ -60,3 +60,4 @@
 {"misconception_id": "QUOTED_NAME_IS_VARIABLE", "description": "Believes putting a variable's name in quotes still refers to its value, so print('x') shows what x holds.", "topic": "strings", "confusable_group": null, "split": "train"}
 {"misconception_id": "SLIP", "description": "Made a careless slip such as a typo or an arithmetic error while understanding the concept correctly.", "topic": null, "confusable_group": null, "split": "train"}
 {"misconception_id": "LLM_GEN_3ec372b7", "description": "Believes that the while loop body never executes and only the final print statement runs.", "topic": "loops", "confusable_group": null, "split": "generated"}
+{"misconception_id": "LLM_GEN_fba7c8c5", "description": "Assumes that using range(len(fruits)) iterates over the fruit values instead of their index numbers.", "topic": "lists", "confusable_group": null, "split": "generated"}

@@ -33,3 +33,6 @@ venv/
 # Local config and database
 .env
 *.db
+
+Modelfile
+model/
