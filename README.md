@@ -322,6 +322,41 @@ The `ask` step never includes `correct_output`, `predicted_outputs` or
 `reference_solution` — a test asserts this.
 
 ---
+## 📊 Model Evaluation & Benchmark Results
+
+The fine-tuned model ([`relearn-diagnosis`](file:///d:/BnB%20Hackathon/Embedding%20model/models/relearn-diagnosis)) was benchmarked against the untuned zero-shot baseline ([`google/embeddinggemma-300m`](https://huggingface.co/google/embeddinggemma-300m)) on the held-out validation set of 205 student response pairs across 49 active misconception classes.
+
+### Accuracy & Retrieval Performance
+
+| Metric | Untuned Baseline (`embeddinggemma-300m`) | Fine-Tuned (`relearn-diagnosis`) | Absolute Improvement | Relative Gain |
+| :--- | :---: | :---: | :---: | :---: |
+| **Top-1 Accuracy** | **21.95%** (45 / 205) | **59.51%** (122 / 205) | **+37.56%** | **+171.1%** |
+| **Top-3 Accuracy** | **42.44%** (87 / 205) | **82.93%** (170 / 205) | **+40.49%** | **+95.4%** |
+| **Top-3 Diagnostic Recall** | 42.44% | **82.93%** | +40.49% | +95.4% |
+| **Validation Pairs ($N$)** | 205 pairs | 205 pairs | — | — |
+| **Misconception Search Space** | 49 active classes | 49 active classes | — | — |
+
+
+## 📉 Training Loss & Convergence Trajectory
+
+Contrastive loss tracked across training steps:
+
+| Epoch | Global Step | Contrastive Loss | Learning Rate | Gradient Norm |
+| :---: | :---: | :---: | :---: | :---: |
+| **0.22** | Step 20 | 1.0335 | $1.03 \times 10^{-5}$ | 142.35 |
+| **0.44** | Step 40 | 1.0876 | $1.99 \times 10^{-5}$ | 39.09 |
+| **0.88** | Step 80 | 0.8545 | $1.74 \times 10^{-5}$ | 28.23 |
+| **1.10** | Step 100 | 0.4185 | $1.62 \times 10^{-5}$ | 63.11 |
+| **1.98** | Step 180 | 0.4418 | $1.13 \times 10^{-5}$ | 0.00 |
+| **2.20** | Step 200 | 0.2471 | $1.01 \times 10^{-5}$ | 44.57 |
+| **3.08** | Step 280 | 0.0984 | $5.20 \times 10^{-6}$ | 25.95 |
+| **3.74** | Step 340 | 0.2800 | $1.53 \times 10^{-6}$ | 0.13 |
+| **3.96** | Step 360 | **0.0728** | $3.06 \times 10^{-7}$ | 0.52 |
+
+* **Total Loss Reduction**: From **1.0335** to **0.0728** (**92.95% reduction** in contrastive loss).
+
+---
+
 
 ## Honesty rules this app follows
 
