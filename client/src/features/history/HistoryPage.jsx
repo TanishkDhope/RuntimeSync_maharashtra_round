@@ -48,8 +48,9 @@ export function HistoryPage() {
     <PageFrame>
       <Overview learner={learner} beliefs={beliefs} attempts={attempts} />
       <TopicMastery topics={topicMastery} />
-      <BeliefGraph learnerId={learnerId} />
+      
       <BeliefLedger beliefs={beliefs} learnerId={learnerId} />
+      <BeliefGraph learnerId={learnerId} />
       <AttemptTimeline attempts={attempts} />
     </PageFrame>
   )
