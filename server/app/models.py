@@ -40,11 +40,18 @@ class QuizSession(SQLModel, table=True):
     learner_id: int = Field(foreign_key="learners.id", index=True)
     topic: str = Field(max_length=40)
     # asking -> waiting for an answer | feedback -> answer graded, awaiting
-    # continue | done -> queue exhausted
+    # continue | probe -> waiting for probe answer | explain -> showing explanation
+    # retest -> running retest questions | verdict -> final verdict shown
+    # done -> queue exhausted
     state: str = Field(default="asking", max_length=20)
     problem_queue: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     cursor: int = Field(default=0)
     started_at: datetime = Field(default_factory=_now)
+    # Probe / explain / retest / verdict tracking
+    probe_problem_id: str | None = Field(default=None, max_length=40)
+    confirmed_misconception_id: str | None = Field(default=None, max_length=60)
+    retest_cursor: int = Field(default=0)
+    retest_total: int = Field(default=0)
 
 
 class Attempt(SQLModel, table=True):

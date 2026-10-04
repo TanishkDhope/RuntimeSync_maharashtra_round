@@ -231,7 +231,149 @@ class SummaryStep(BaseModel):
     undiagnosed_count: int = 0
 
 
-Step = AskStep | FeedbackStep | SummaryStep
+
+# --- probe ------------------------------------------------------------------
+
+class ProbeQuestion(BaseModel):
+    """The generated or bank-sourced probe question."""
+    problem: ProblemOut
+    candidates: list[str]           # misconception_ids being differentiated
+    predictions: dict[str, str]     # misconception_id -> expected output
+    source: Literal["bank", "llm"] = "llm"
+    executed: bool = False
+    independent_check: bool = False
+
+
+class ProbeStep(BaseModel):
+    step: Literal["probe"] = "probe"
+    session_id: int
+    progress: Progress
+    graded: dict                    # echoes the initial graded attempt info
+    diagnosis: dict                 # echoes diagnosis info
+    probe: ProbeQuestion
+
+
+# --- intervention (explain) -------------------------------------------------
+
+class ExplanationOut(BaseModel):
+    text: str
+    source: Literal["llm", "authored"] = "llm"
+
+
+class MisconceptionRef(BaseModel):
+    misconception_id: str
+    description: str
+
+
+class InterventionStep(BaseModel):
+    step: Literal["intervention"] = "intervention"
+    session_id: int
+    progress: Progress
+    graded: dict | None = None
+    diagnosis: dict | None = None
+    probe_outcome: dict | None = None
+    misconception: MisconceptionRef
+    explanation: ExplanationOut
+    trace: dict | None = None       # future: execution trace steps
+
+
+# --- reassess (retest) -------------------------------------------------------
+
+class ReassessAskStep(BaseModel):
+    step: Literal["ask"] = "ask"
+    phase: Literal["reassess"] = "reassess"
+    session_id: int
+    progress: Progress
+    problem: ProblemOut
+    reassess: dict                  # {index, total}
+    transfer: str | None = None
+
+
+class ModelCheckOut(BaseModel):
+    misconception_id: str
+    rank: int
+    score: float
+
+
+class ReassessGraded(BaseModel):
+    problem: ProblemOut
+    student_response: str
+    student_explanation: str
+    is_correct: bool
+    correct_output: str | None = None
+    test_results: list[TestResultOut] | None = None
+
+
+class ReassessStep(BaseModel):
+    step: Literal["reassess"] = "reassess"
+    session_id: int
+    progress: Progress
+    index: int
+    total: int
+    graded: ReassessGraded
+    model_check: ModelCheckOut | None = None
+
+
+# --- result (verdict) --------------------------------------------------------
+
+class VerdictReason(BaseModel):
+    text: str
+    ok: bool
+
+
+class MisconceptionRecord(BaseModel):
+    misconception_id: str
+    description: str
+    from_: str | None = None        # previous status
+    to: str                         # new status
+    # Pydantic alias so it serialises as "from" in JSON, which is what the frontend reads
+    model_config = {"populate_by_name": True}
+
+    @classmethod
+    def build(cls, m_id: str, description: str, from_status: str | None, to_status: str):
+        return cls(misconception_id=m_id, description=description, from_=from_status, to=to_status)
+
+
+class ResultStep(BaseModel):
+    step: Literal["result"] = "result"
+    session_id: int
+    progress: Progress
+    verdict: Literal["resolved", "improving", "active"]
+    reasons: list[VerdictReason]
+    record: dict                    # {misconception_id, description, from, to}
+    has_next: bool
+
+
+Step = AskStep | FeedbackStep | ProbeStep | InterventionStep | ReassessAskStep | ReassessStep | ResultStep | SummaryStep
+
+
+# --- new requests -----------------------------------------------------------
+
+class ProbeAnswerIn(BaseModel):
+    student_response: str
+    student_explanation: str = Field(min_length=1)
+
+    @field_validator("student_explanation")
+    @classmethod
+    def _require_reason(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("a one-line reason is required")
+        return stripped
+
+
+class RetestAnswerIn(BaseModel):
+    student_response: str
+    student_explanation: str = Field(min_length=1)
+
+    @field_validator("student_explanation")
+    @classmethod
+    def _require_reason(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("a one-line reason is required")
+        return stripped
+
 
 
 # --- requests ---------------------------------------------------------------
