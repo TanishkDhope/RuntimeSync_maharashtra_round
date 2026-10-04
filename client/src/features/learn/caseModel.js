@@ -271,7 +271,7 @@ export function continueLabel(c) {
     case "feedback":
     case "correct":
     case "unknown":
-      return c.hasNext ? "Next problem" : "See the session summary"
+      return c.hasNext ? "Next check" : "See the session summary"
     case "result":
       return c.hasNext ? "Next problem" : "See the session summary"
     case "intervention":
