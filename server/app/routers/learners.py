@@ -5,9 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
-from ..deps import DbDep
+from .. import flow
+from ..deps import DbDep, LibraryDep
 from ..models import Learner
-from ..schemas import LearnerCreate, LearnerOut
+from ..schemas import LearnerCreate, LearnerHistoryOut, LearnerOut
 
 router = APIRouter(prefix="/learners", tags=["learners"])
 
@@ -38,3 +39,12 @@ def get_learner(learner_id: int, db: DbDep) -> Learner:
     if learner is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no learner {learner_id}")
     return learner
+
+
+@router.get("/{learner_id}/history", response_model=LearnerHistoryOut)
+def get_learner_history(learner_id: int, db: DbDep, library: LibraryDep) -> LearnerHistoryOut:
+    try:
+        return flow.build_learner_history(db, library, learner_id)
+    except flow.FlowError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+

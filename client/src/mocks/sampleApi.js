@@ -393,6 +393,22 @@ export const sampleApi = {
     throw new ApiError("answer the current question first", 409)
   },
 
+  async probe(sessionId, response, reason) {
+    // Sample mode routes probe through the answer endpoint.
+    await wait(1400) // explanation generated on this hop
+    const s = sessionOr404(sessionId)
+    if (s.phase === "probe") return finish(s, answerProbe(s, response, reason))
+    return s.last
+  },
+
+  async retest(sessionId, response, reason) {
+    // Sample mode routes retest through the answer endpoint.
+    await wait(600)
+    const s = sessionOr404(sessionId)
+    if (s.phase === "reassess") return finish(s, answerRetest(s, response, reason))
+    return s.last
+  },
+
   async history(learnerId) {
     await wait(250)
     const learner = state.learners.find((l) => l.id === learnerId)

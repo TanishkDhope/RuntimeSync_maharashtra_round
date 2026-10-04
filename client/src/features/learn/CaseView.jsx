@@ -22,7 +22,9 @@ import { VerdictSection } from "./sections/VerdictSection"
 export function CaseView({ c, live, thread }) {
   const focus = live ? focusPhase(c) : null
   const fold = (phase) => phase !== focus
-  const form = live
+
+  // Each interactive section gets its own form shape pointing at the right mutation.
+  const answerForm = live
     ? {
         onSubmit: (response, reason) => thread.answer.mutate({ response, reason }),
         busy: thread.answer.isPending,
@@ -30,23 +32,52 @@ export function CaseView({ c, live, thread }) {
         error: thread.answer.error,
       }
     : null
-  const last = c.last
+
+  // Probe form: submits to /probe endpoint
+  const probeForm = live && thread.probe
+    ? {
+        onSubmit: (response, reason) => thread.probe.mutate({ response, reason }),
+        busy: thread.probe.isPending,
+        busyLabel: "Checking which belief your answer matches…",
+        error: thread.probe.error,
+      }
+    : null
+
+  // Retest form: submits to /retest endpoint
+  const retestForm = live && thread.retest
+    ? {
+        onSubmit: (response, reason) => thread.retest.mutate({ response, reason }),
+        busy: thread.retest.isPending,
+        busyLabel: busyLabel(c, "answer"),
+        error: thread.retest.error,
+      }
+    : null
 
   return (
     <div className="space-y-3">
       <AnswerSection
         c={c}
         folded={fold("answer")}
-        interactive={live && last?.step === "ask" && last.phase !== "reassess"}
-        form={form}
+        interactive={live && c.last?.step === "ask" && c.last.phase !== "reassess"}
+        form={answerForm}
       />
       {c.graded && !c.correct && c.diagnosis && <DiagnoseSection c={c} folded={fold("diagnose")} />}
       {c.probe && (
-        <ProbeSection c={c} folded={fold("probe")} interactive={live && last?.step === "probe"} form={form} />
+        <ProbeSection
+          c={c}
+          folded={fold("probe")}
+          interactive={live && c.last?.step === "probe" && !c.probe?.outcome}
+          form={probeForm}
+        />
       )}
       {c.intervention && <ExplainSection c={c} folded={fold("explain")} />}
       {c.retest.items.length > 0 && (
-        <RetestSection c={c} folded={fold("retest")} interactive={live} form={form} />
+        <RetestSection
+          c={c}
+          folded={fold("retest")}
+          interactive={live && c.last?.step === "ask" && c.last?.phase === "reassess"}
+          form={retestForm}
+        />
       )}
       {c.verdict && <VerdictSection c={c} folded={fold("verdict")} />}
 
@@ -57,11 +88,6 @@ export function CaseView({ c, live, thread }) {
           busy={thread.advance.isPending}
           busyLabel={busyLabel(c, "next")}
           error={thread.advance.error}
-          note={
-            c.legacy && !c.correct
-              ? "The backend doesn't serve the probe, explanation and retest steps yet."
-              : undefined
-          }
         />
       )}
     </div>

@@ -19,3 +19,6 @@ train_model.md
 
 # Playwright MCP browser-testing artifacts
 .playwright-mcp/
+
+package-lock.json
+CLAUDE.md

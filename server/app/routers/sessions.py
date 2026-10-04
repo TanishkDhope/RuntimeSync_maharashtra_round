@@ -5,9 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from .. import flow
+from .. import stages
 from ..deps import DbDep, DiagnoserDep, LibraryDep, SettingsDep
 from ..models import Learner, QuizSession
-from ..schemas import AnswerIn, SessionCreate, Step
+from ..schemas import AnswerIn, ProbeAnswerIn, RetestAnswerIn, SessionCreate, Step
 
 # Starlette renamed this constant; getattr keeps both versions working and
 # keeps the deprecation warning out of the test output.
@@ -89,4 +90,46 @@ def next_step(session_id: int, db: DbDep, library: LibraryDep, settings: Setting
     try:
         return flow.advance(db, library, settings, _load(db, session_id))
     except flow.FlowError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+# --- New endpoints for Probe, Retest ----------------------------------------
+
+@router.post("/{session_id}/probe", response_model=Step)
+def answer_probe(
+    session_id: int,
+    payload: ProbeAnswerIn,
+    db: DbDep,
+    library: LibraryDep,
+    settings: SettingsDep,
+    diagnoser: DiagnoserDep,
+):
+    """Submit an answer to the probe question."""
+    quiz = _load(db, session_id)
+    try:
+        return stages.submit_probe_answer(
+            db, library, settings, diagnoser, quiz,
+            payload.student_response, payload.student_explanation,
+        )
+    except Exception as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.post("/{session_id}/retest", response_model=Step)
+def answer_retest(
+    session_id: int,
+    payload: RetestAnswerIn,
+    db: DbDep,
+    library: LibraryDep,
+    settings: SettingsDep,
+    diagnoser: DiagnoserDep,
+):
+    """Submit an answer to the current retest question."""
+    quiz = _load(db, session_id)
+    try:
+        return stages.submit_retest_answer(
+            db, library, settings, diagnoser, quiz,
+            payload.student_response, payload.student_explanation,
+        )
+    except Exception as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

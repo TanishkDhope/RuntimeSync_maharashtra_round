@@ -11,6 +11,9 @@ import { readJson, writeJson } from "@/lib/storage"
  * kept per tab in sessionStorage; a refresh restores it, and a fresh tab
  * starts from the backend's current step. The backend owns the flow: this
  * hook only sends answers and "continue", and appends whatever comes back.
+ *
+ * New mutations: probe (answer to probe question) and retest (answer to each
+ * retest question). Both use the same append / resync pattern as answer.
  */
 export function useThread(sessionId) {
   const queryClient = useQueryClient()
@@ -57,11 +60,27 @@ export function useThread(sessionId) {
     onError: resync,
   })
 
+  // Submit answer to the probe question → backend moves to explain state
+  const probe = useMutation({
+    mutationFn: ({ response, reason }) => api.probe(sessionId, response, reason),
+    onSuccess: append,
+    onError: resync,
+  })
+
+  // Submit answer to a retest question → backend moves to next retest or verdict
+  const retest = useMutation({
+    mutationFn: ({ response, reason }) => api.retest(sessionId, response, reason),
+    onSuccess: append,
+    onError: resync,
+  })
+
   return {
     steps,
     loading: steps.length === 0 && current.isPending,
     loadError: steps.length === 0 ? current.error : null,
     answer,
     advance,
+    probe,
+    retest,
   }
 }

@@ -271,6 +271,7 @@ export function continueLabel(c) {
     case "feedback":
     case "correct":
     case "unknown":
+      return c.hasNext ? "Next problem" : "See the session summary"
     case "result":
       return c.hasNext ? "Next problem" : "See the session summary"
     case "intervention":
@@ -297,5 +298,12 @@ export function busyLabel(c, action) {
 
 /** Whether the step on screen takes an answer (rather than a continue). */
 export function takesAnswer(c) {
-  return c.last?.step === "ask" || (c.last?.step === "probe" && !c.probe?.outcome)
+  const last = c.last
+  // Initial ask
+  if (last?.step === "ask" && last?.phase !== "reassess") return true
+  // Probe question (before outcome is known)
+  if (last?.step === "probe" && !c.probe?.outcome) return true
+  // Retest ask (phase === "reassess" means the backend served an ask step for a retest item)
+  if (last?.step === "ask" && last?.phase === "reassess") return true
+  return false
 }

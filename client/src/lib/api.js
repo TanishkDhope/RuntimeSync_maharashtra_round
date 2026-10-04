@@ -67,9 +67,20 @@ const httpApi = {
       body: { student_response: response, student_explanation: reason },
     }),
   next: (sessionId) => request(`/sessions/${sessionId}/next`, { method: "POST" }),
+  probe: (sessionId, response, reason) =>
+    request(`/sessions/${sessionId}/probe`, {
+      method: "POST",
+      body: { student_response: response, student_explanation: reason },
+    }),
+  retest: (sessionId, response, reason) =>
+    request(`/sessions/${sessionId}/retest`, {
+      method: "POST",
+      body: { student_response: response, student_explanation: reason },
+    }),
   history: (learnerId) => request(`/learners/${learnerId}/history`),
   evaluation: () => request("/evaluation"),
 }
+
 
 let resolved = null
 
